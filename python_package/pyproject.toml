@@ -1,0 +1,38 @@
+# Build system for the package
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+# Package metadata
+[project]
+name = "ppls"
+version = "0.0.1"
+description = "Probabilistic Partial Least Squares"
+dynamic = ["readme"]
+authors = [
+  { name = "Miguel C. Herculano", email = "miguel.herculano@glasgow.ac.uk"},
+  { name = "Santiago Montoya-Blandón", email = "Santiago.Montoya-Blandon@glasgow.ac.uk" }
+]
+maintainers = [
+  { name = "Miguel C. Herculano", email = "miguel.herculano@glasgow.ac.uk"},
+  { name = "Santiago Montoya-Blandón", email = "Santiago.Montoya-Blandon@glasgow.ac.uk" }
+]
+dependencies = ["numpy", "sklearn.metrics"]
+requires-python = ">=3.8"
+classifiers = [
+    "Programming Language :: Python :: 3", # "Programming Language" represents the top-level category, "Python" represents the second-level category, and "3.8" represents the third-level category.
+	"License :: OSI Approved :: MIT License",
+	"Operating System :: OS Independent",    # The software package is not dependent on any specific operating system
+]
+keywords = ["Partial Least Squares", "high-dimensional data", "Expectation-Maximization algorithm", "missing data", "bayesian"]
+
+[project.urls]
+"Homepage" = "https://github.com/smonto2/PPLS"
+"Bug tracking" = "https://github.com/smonto2/PPLS/issues"
+
+[tool.setuptools.dynamic]
+version = {attr = "ppls.VERSION"}
+readme = {file = "README.md", content-type = "text/markdown"}
+
+# [tool.setuptools]
+# package-dir = {"" = "src"}

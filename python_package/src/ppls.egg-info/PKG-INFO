@@ -1,0 +1,19 @@
+Metadata-Version: 2.1
+Name: ppls
+Version: 0.0.1
+Summary: Probabilistic Partial Least Squares
+Author-email: "Miguel C. Herculano" <miguel.herculano@glasgow.ac.uk>, Santiago Montoya-Blandón <Santiago.Montoya-Blandon@glasgow.ac.uk>
+Maintainer-email: "Miguel C. Herculano" <miguel.herculano@glasgow.ac.uk>, Santiago Montoya-Blandón <Santiago.Montoya-Blandon@glasgow.ac.uk>
+Project-URL: Homepage, https://github.com/smonto2/PPLS
+Project-URL: Bug tracking, https://github.com/smonto2/PPLS/issues
+Keywords: Partial Least Squares,high-dimensional data,Expectation-Maximization algorithm,missing data,bayesian
+Classifier: Programming Language :: Python :: 3
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: OS Independent
+Requires-Python: >=3.8
+Description-Content-Type: text/markdown
+License-File: LICENSE.md
+Requires-Dist: numpy
+Requires-Dist: sklearn.metrics
+
+This package performs a Probabilistic version of Partial Least Squares. It provides an EM algorithm for learning the parameters of the approximation as well as Bayesian methods for probabilistic factor extraction that maximize covariance of features to targets.

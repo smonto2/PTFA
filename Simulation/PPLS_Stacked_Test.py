@@ -289,7 +289,7 @@ def PPLS_stacked_missing(X, Y, k, tolerance = 1e-6,  max_iter = 1000, V_prior = 
     return M, Y_hat, r2_list, L1, sigma2_x1, sigma2_y1
 
 # Run a test of the commands with homoskedastic data
-n = 6
+n = 1000
 p = 5
 q = 2
 k = 3
