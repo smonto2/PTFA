@@ -83,7 +83,7 @@ class ProbabilisticPLS:
         self.Q = Q
         self.sigma2_x = sigma2_x1
         self.sigma2_y = sigma2_y1
-        self.r2_array_ = np.asarray(r2_list) if track_r2 else None
+        self.r2_array = np.asarray(r2_list) if track_r2 else None
         
     def fitted(self, X, Y, standardize = False, prediction_variance = False):
         # Center and scale predictors and targets separately before stacking
@@ -137,7 +137,7 @@ class ProbabilisticPLS:
             predicted_variance = self.sigma2_y * np.eye(q) + self.Q @ np.linalg.solve(Omega_X_inverse, self.Q.T)
             return Y_hat, predicted_variance
 
-class ProbablisticPLS_Missing:
+class ProbabilisticPLS_Missing:
     def __init__(self, n_components, tolerance = 1e-6, max_iter = 1000, V_prior = None):
         # Fill in components of the class
         self.n_components = n_components
@@ -237,7 +237,7 @@ class ProbablisticPLS_Missing:
         self.Q = Q
         self.sigma2_x = sigma2_x1
         self.sigma2_y = sigma2_y1
-        self.r2_array_ = np.asarray(r2_list) if track_r2 else None
+        self.r2_array = np.asarray(r2_list) if track_r2 else None
         self.Z_hat_ = Z_hat
 
     def fitted(self, X, Y, standardize = False, prediction_variance = False):
@@ -306,7 +306,187 @@ class ProbablisticPLS_Missing:
             q = self.Q.shape[0]
             predict_variance = self.sigma2_y * np.eye(q) + self.Q @ np.linalg.solve(Omega_X_inverse, self.Q.T)
             return Y_hat, predict_variance
+
+class ProbabilisticPLS_MixedFrequency:
+    def __init__(self, n_components, tolerance = 1e-6, max_iter = 1000, V_prior = None):
+        # Fill in components of the class
+        self.n_components = n_components
+        self.max_iter = max_iter
+        self.tolerance = tolerance
+        if V_prior is None:
+            self.V_prior = np.eye(n_components)
+        self.V_prior_inv = np.eye(n_components) if V_prior is None else np.linalg.inv(V_prior)
         
+        # Pre-allocate memory for estimates
+        self.P = None
+        self.Q = None
+        self.sigma2_x = None
+        self.sigma2_y = None
+
+    def highfrequency_to_lowfrequency_reshape(self, X, low_frequency_T, periods):
+        # Obtain available periods and any remainder needed to be filled out
+        high_frequency_T, p = X.shape
+        last_T = periods * (low_frequency_T - 1)
+        remainder_T = high_frequency_T - last_T
+
+        # Pre-allocate reshaped object and fill out available information
+        reshaped_X = np.zeros([low_frequency_T, p * periods])
+        for t in range(low_frequency_T - 1):
+            row_index = range(t * periods, (t+1) * periods)
+            reshaped_X[t] = np.ravel(X[row_index])
+
+        # Fill out information corresponding to last entry (needed if remainder_T > 0)
+        row_index = range(last_T, (low_frequency_T - 1) * periods + remainder_T)
+        reshaped_X[low_frequency_T - 1, :(p * remainder_T)] = np.ravel(X[row_index])
+        return reshaped_X, remainder_T
+
+    def fit(self, X, Y, periods, standardize = False, track_r2 = False):
+        # Obtain sizes
+        # X is assumed inputed as high_frequency_T x p; Y is low_frequency_T x q
+        # Currently assumes periods = high_frequency_T / low_frequency_T
+        # Future: Implement periods that changes for each low frequency interval
+        low_frequency_T, q = Y.shape
+        _, p = X.shape
+        k = self.n_components
+
+        # Center and scale predictors and targets separately
+        if standardize:
+            X = (X - X.mean(axis = 0)) / X.std(axis = 0)
+            Y = (Y - Y.mean(axis = 0)) / Y.std(axis = 0)
+
+        # Re-shape X into an low_frequency_T x (p * periods)
+        reshaped_X, remainder_T = self.highfrequency_to_lowfrequency_reshape(X, low_frequency_T, periods)
+        
+        # Initial values for the parameters
+        P0 = np.random.default_rng().normal(size = [p, k])
+        Q0 = np.random.default_rng().normal(size = [q, k])
+        sigma2_x0 = np.var(X, axis = 0).mean()    # Mean variance across features
+        sigma2_y0 = np.var(Y, axis = 0).mean()    # Mean variance across targets
+
+        # Track R-squared of fit if necessary
+        if track_r2:
+            r2_list = []
+
+        # Start EM algorithm main loop
+        J_periods = np.full([periods, periods], 1 / periods)
+        for _ in range(self.max_iter):
+            # Expectation step: Update posterior paramater for factors
+            P_scaled = P0 / sigma2_x0
+            Q_scaled = Q0 / sigma2_y0
+            Omega_P_term = np.kron(np.eye(periods), self.V_prior_inv + P0.T @ P_scaled)
+            Omega_Q_term = np.kron(J_periods, Q0.T @ Q_scaled)
+            Omega = np.linalg.inv(Omega_P_term + Omega_Q_term)
+            ZL_matrix = np.zeros([low_frequency_T, periods * k])
+            Y_times_Q = Y @ Q_scaled
+            for j in range(periods):
+                ZL_matrix[:, range(j * k, (j+1) * k)] = reshaped_X[:, range(j * p, (j+1) * p)] @ P_scaled + Y_times_Q
+            M = ZL_matrix @ Omega
+            
+            # Update missing high-frequency features using current EM fitted values
+            X_hat_missing = M[low_frequency_T - 1, (k * remainder_T):] @ np.kron(np.eye(periods - remainder_T), P0.T)
+            reshaped_X[low_frequency_T - 1, (p * remainder_T):] = X_hat_missing
+            
+            # Maximization step: Update factor loadings and variances
+            V_array = np.reshape(low_frequency_T * Omega + M.T @ M, [periods, k, periods, k]).transpose(0, 2, 1, 3)
+            V_diagsum = np.einsum('iijk->jk', V_array)
+            V_allsum = np.einsum('ijkl->kl', V_array)
+            M_sum = 0
+            XM_sum = 0
+            for j in range(periods):
+                M_sum += M[:, range(j * k, (j+1) * k)]
+                XM_sum += reshaped_X[:, range(j * p, (j+1) * p)].T @ M[:, range(j * k, (j+1) * k)]
+            P1 = np.linalg.solve(V_diagsum, XM_sum.T).T
+            Q1 = periods * np.linalg.solve(V_allsum, M_sum.T @ Y).T
+            Y_hat = (1/periods) * M_sum @ Q1.T
+            sigma2_x1 = (1/(low_frequency_T * p * periods)) * (np.sum(X**2) - np.trace(P1.T @ P1 @ V_diagsum))
+            sigma2_y1 = (periods/(low_frequency_T * q)) * np.sum(Y * (Y - Y_hat))
+            
+            # Compute distance between iterates
+            P_distance = np.linalg.norm(P1 - P0, "fro")
+            Q_distance = np.linalg.norm(Q1 - Q0, "fro")
+            sigma_x_distance = np.abs(sigma2_x1 - sigma2_x0)
+            sigma_y_distance = np.abs(sigma2_y1 - sigma2_y0)
+            theta_distance = sum([P_distance, Q_distance, sigma_x_distance, sigma_y_distance])
+            
+            # Prediction and tracking of R-squared across iterations
+            if track_r2:
+                r2_values = r2_score(Y, Y_hat, multioutput = "raw_values")
+                r2_list.append(r2_values)
+
+            # Check convergence condition
+            if (theta_distance <= self.tolerance):
+                # Break if distance between each estimate is less than a tolerance
+                break
+            else:
+                # Prepare values for next iteration if convergence not reached
+                P0 = P1
+                Q0 = Q1
+                sigma2_x0 = sigma2_x1
+                sigma2_y0 = sigma2_y1
+        
+        # Update values of the class with results from EM algorithm
+        self.P = P1
+        self.Q = Q1
+        self.sigma2_x = sigma2_x1
+        self.sigma2_y = sigma2_y1
+        self.r2_array = np.asarray(r2_list) if track_r2 else None
+
+    def fitted(self, X, Y, periods, standardize = False):
+        # Obtain necessary sizes
+        low_frequency_T, _ = Y.shape
+        _, p = X.shape
+        k = self.n_components
+        
+        # Center and scale predictors and targets separately
+        if standardize:
+            X = (X - X.mean(axis = 0)) / X.std(axis = 0)
+            Y = (Y - Y.mean(axis = 0)) / Y.std(axis = 0)
+
+        # Re-shape X into an low_frequency_T x (p * periods), padding if necessary
+        reshaped_X, _ = self.highfrequency_to_lowfrequency_reshape(X, low_frequency_T, periods)
+
+        # Obtain predicted factors: F_predicted = M (Posterior mean of factors)
+        P_scaled = self.P / self.sigma2_x
+        Q_scaled = self.Q / self.sigma2_y
+        J_periods = np.full([periods, periods], 1 / periods)
+        Omega_P_term = np.kron(np.eye(periods), self.V_prior_inv + self.P.T @ P_scaled)
+        Omega_Q_term = np.kron(J_periods, self.Q.T @ Q_scaled)
+        ZL_matrix = np.zeros([low_frequency_T, periods * k])
+        Y_times_Q = Y @ Q_scaled
+        for j in range(periods):
+            ZL_matrix[:, range(j * k, (j+1) * k)] = reshaped_X[:, range(j * p, (j+1) * p)] @ P_scaled + Y_times_Q
+        F_predicted = np.linalg.solve(Omega_P_term + Omega_Q_term, ZL_matrix.T).T
+        
+        # Predict using estimated factors
+        F_sum = sum([F_predicted[:, range(j * k, (j+1) * k)] for j in range(periods)])
+        Y_hat = (1/periods) * F_sum @ self.Q.T
+        return Y_hat
+    
+    def predict(self, X, low_frequency_T, periods, standardize = False):
+        # Obtain necessary sizes
+        _, p = X.shape
+        k = self.n_components
+        
+        # Center and scale predictors and targets separately
+        if standardize:
+            X = (X - X.mean(axis = 0)) / X.std(axis = 0)
+
+        # Re-shape X into an low_frequency_T x (p * periods), padding if necessary
+        reshaped_X, _ = self.highfrequency_to_lowfrequency_reshape(X, low_frequency_T, periods)
+        
+        # Obtain predicted factors: F_predicted = M (Posterior mean of factors)
+        P_scaled = self.P / self.sigma2_x
+        Omega_P_term = np.kron(np.eye(periods), self.V_prior_inv + self.P.T @ P_scaled)
+        XP_matrix = np.zeros([low_frequency_T, periods * k])
+        for j in range(periods):
+            XP_matrix[:, range(j * k, (j+1) * k)] = reshaped_X[:, range(j * p, (j+1) * p)] @ P_scaled
+        F_predicted = np.linalg.solve(Omega_P_term, XP_matrix.T).T
+        
+        # Predict using estimated factors
+        F_sum = np.sum([F_predicted[:, range(j * k, (j+1) * k)] for j in range(periods)])
+        Y_hat = (1/periods) * F_sum @ self.Q.T
+        return Y_hat
+
 class ProbabilisticPLS_StochasticVolatility:
     def __init__(self, n_components, tolerance = 1e-6, max_iter = 1000, V_prior = None,
                  ewma_lambda_x = 0.94, ewma_lambda_y = None):
@@ -422,7 +602,7 @@ class ProbabilisticPLS_StochasticVolatility:
         self.Q = Q
         self.sigma2_x = sigma2_x
         self.sigma2_y = sigma2_y
-        self.r2_array_ = np.asarray(r2_list) if track_r2 else None
+        self.r2_array = np.asarray(r2_list) if track_r2 else None
         
     def fitted(self, X, Y, standardize = False):
         # Center and scale predictors and targets separately before stacking
@@ -476,183 +656,3 @@ class ProbabilisticPLS_StochasticVolatility:
         #     q = self.Q.shape[0]
         #     predicted_variance = self.sigma2_y * np.eye(q) + self.Q @ np.linalg.solve(Omega_X_inverse, self.Q.T)
         #     return Y_hat, predicted_variance
-
-class ProbabilisticPLS_MixedFrequency:
-    def __init__(self, n_components, tolerance = 1e-6, max_iter = 1000, V_prior = None):
-        # Fill in components of the class
-        self.n_components = n_components
-        self.max_iter = max_iter
-        self.tolerance = tolerance
-        if V_prior is None:
-            self.V_prior = np.eye(n_components)
-        self.V_prior_inv = np.eye(n_components) if V_prior is None else np.linalg.inv(V_prior)
-        
-        # Pre-allocate memory for estimates
-        self.P = None
-        self.Q = None
-        self.sigma2_x = None
-        self.sigma2_y = None
-
-    def highfrequency_to_lowfrequency_reshape(X, low_frequency_T, periods):
-        # Obtain available periods and any remainder needed to be filled out
-        high_frequency_T, p = X.shape
-        last_T = periods * (low_frequency_T - 1)
-        remainder_T = high_frequency_T - last_T
-
-        # Pre-allocate reshaped object and fill out available information
-        reshaped_X = np.zeros([low_frequency_T, p * periods])
-        for t in range(low_frequency_T - 1):
-            row_index = range(t * periods, (t+1) * periods)
-            reshaped_X[t] = np.ravel(X[row_index])
-
-        # Fill out information corresponding to last entry (needed if remainder_T > 0)
-        row_index = range(last_T, (low_frequency_T - 1) * periods + remainder_T)
-        reshaped_X[low_frequency_T - 1, :(p * remainder_T)] = np.ravel(X[row_index])
-        return reshaped_X, remainder_T
-
-    def fit(self, X, Y, periods, standardize = False, track_r2 = False):
-        # Obtain sizes
-        # X is assumed inputed as high_frequency_T x p; Y is low_frequency_T x q
-        # Currently assumes periods = high_frequency_T / low_frequency_T
-        # Future: Implement periods that changes for each low frequency interval
-        low_frequency_T, q = Y.shape
-        _, p = X.shape
-        k = self.n_components
-
-        # Center and scale predictors and targets separately
-        if standardize:
-            X = (X - X.mean(axis = 0)) / X.std(axis = 0)
-            Y = (Y - Y.mean(axis = 0)) / Y.std(axis = 0)
-
-        # Re-shape X into an low_frequency_T x (p * periods)
-        reshaped_X, remainder_T = self.highfrequency_to_lowfrequency_reshape(X, low_frequency_T, periods)
-        
-        # Initial values for the parameters
-        P0 = np.random.default_rng().normal(size = [p, k])
-        Q0 = np.random.default_rng().normal(size = [q, k])
-        sigma2_x0 = np.var(X, axis = 0).mean()    # Mean variance across features
-        sigma2_y0 = np.var(Y, axis = 0).mean()    # Mean variance across targets
-
-        # Track R-squared of fit if necessary
-        if track_r2:
-            r2_list = []
-
-        # Start EM algorithm main loop
-        J_periods = np.full([periods, periods], 1 / periods)
-        for _ in range(self.max_iter):
-            # Expectation step: Update posterior paramater for factors
-            P_scaled = P0 / sigma2_x0
-            Q_scaled = Q0 / sigma2_y0
-            Omega_P_term = np.kron(np.eye(periods), self.V_prior_inv + P0.T @ P_scaled)
-            Omega_Q_term = np.kron(J_periods, Q0.T @ Q_scaled)
-            Omega = np.linalg.inv(Omega_P_term + Omega_Q_term)
-            ZL_matrix = np.zeros([low_frequency_T, periods * k])
-            Y_times_Q = Y @ Q_scaled
-            for j in range(periods):
-                ZL_matrix[:, range(j * k, (j+1) * k)] = reshaped_X[:, range(j * p, (j+1) * p)] @ P_scaled + Y_times_Q
-            M = ZL_matrix @ Omega
-            
-            # Update missing high-frequency features using current EM fitted values
-            X_hat_missing = M[low_frequency_T - 1, (k * remainder_T):] @ np.kron(np.eye(periods - remainder_T), P0.T)
-            reshaped_X[low_frequency_T - 1, (p * remainder_T):] = X_hat_missing
-            
-            # Maximization step: Update factor loadings and variances
-            V_array = np.reshape(low_frequency_T * Omega + M.T @ M, [periods, k, periods, k]).transpose(0, 2, 1, 3)
-            V_diagsum = np.einsum('iijk->jk', V_array)
-            V_allsum = np.einsum('ijkl->kl', V_array)
-            M_sum = 0
-            XM_sum = 0
-            for j in range(periods):
-                M_sum += M[:, range(j * k, (j+1) * k)]
-                XM_sum += reshaped_X[:, range(j * p, (j+1) * p)].T @ M[:, range(j * k, (j+1) * k)]
-            P1 = np.linalg.solve(V_diagsum, XM_sum.T).T
-            Q1 = periods * np.linalg.solve(V_allsum, M_sum.T @ Y).T
-            Y_hat = (1/periods) * M_sum @ Q1.T
-            sigma2_x1 = (1/(low_frequency_T * p * periods)) * (np.sum(X**2) - np.trace(P1.T @ P1 @ V_diagsum))
-            sigma2_y1 = (periods/(low_frequency_T * q)) * np.sum(Y * (Y - Y_hat))
-            
-            # Compute distance between iterates
-            P_distance = np.linalg.norm(P1 - P0, "fro")
-            Q_distance = np.linalg.norm(Q1 - Q0, "fro")
-            sigma_x_distance = np.abs(sigma2_x1 - sigma2_x0)
-            sigma_y_distance = np.abs(sigma2_y1 - sigma2_y0)
-            theta_distance = sum([P_distance, Q_distance, sigma_x_distance, sigma_y_distance])
-            
-            # Prediction and tracking of R-squared across iterations
-            if track_r2:
-                r2_values = r2_score(Y, Y_hat, multioutput = "raw_values")
-                r2_list.append(r2_values)
-
-            # Check convergence condition
-            if (theta_distance <= self.tolerance):
-                # Break if distance between each estimate is less than a tolerance
-                break
-            else:
-                # Prepare values for next iteration if convergence not reached
-                P0 = P1
-                Q0 = Q1
-                sigma2_x0 = sigma2_x1
-                sigma2_y0 = sigma2_y1
-        
-        # Update values of the class with results from EM algorithm
-        self.P = P1
-        self.Q = Q1
-        self.sigma2_x = sigma2_x1
-        self.sigma2_y = sigma2_y1
-        self.r2_array_ = np.asarray(r2_list) if track_r2 else None
-
-    def fitted(self, X, Y, periods, standardize = False):
-        # Obtain necessary sizes
-        low_frequency_T, _ = Y.shape
-        _, p = X.shape
-        k = self.n_components
-        
-        # Center and scale predictors and targets separately
-        if standardize:
-            X = (X - X.mean(axis = 0)) / X.std(axis = 0)
-            Y = (Y - Y.mean(axis = 0)) / Y.std(axis = 0)
-
-        # Re-shape X into an low_frequency_T x (p * periods), padding if necessary
-        reshaped_X, _ = self.highfrequency_to_lowfrequency_reshape(X, low_frequency_T, periods)
-
-        # Obtain predicted factors: F_predicted = M (Posterior mean of factors)
-        P_scaled = self.P / self.sigma2_x
-        Q_scaled = self.Q / self.sigma2_y
-        J_periods = np.full([periods, periods], 1 / periods)
-        Omega_P_term = np.kron(np.eye(periods), self.V_prior_inv + self.P.T @ P_scaled)
-        Omega_Q_term = np.kron(J_periods, self.Q.T @ Q_scaled)
-        ZL_matrix = np.zeros([low_frequency_T, periods * k])
-        Y_times_Q = Y @ Q_scaled
-        for j in range(periods):
-            ZL_matrix[:, range(j * k, (j+1) * k)] = reshaped_X[:, range(j * p, (j+1) * p)] @ P_scaled + Y_times_Q
-        F_predicted = np.linalg.solve(Omega_P_term + Omega_Q_term, ZL_matrix.T).T
-        
-        # Predict using estimated factors
-        F_sum = np.sum([F_predicted[:, range(j * k, (j+1) * k)] for j in range(periods)])
-        Y_hat = (1/periods) * F_sum @ self.Q.T
-        return Y_hat
-    
-    def predict(self, X, low_frequency_T, periods, standardize = False):
-        # Obtain necessary sizes
-        _, p = X.shape
-        k = self.n_components
-        
-        # Center and scale predictors and targets separately
-        if standardize:
-            X = (X - X.mean(axis = 0)) / X.std(axis = 0)
-
-        # Re-shape X into an low_frequency_T x (p * periods), padding if necessary
-        reshaped_X, _ = self.highfrequency_to_lowfrequency_reshape(X, low_frequency_T, periods)
-        
-        # Obtain predicted factors: F_predicted = M (Posterior mean of factors)
-        P_scaled = self.P / self.sigma2_x
-        Omega_P_term = np.kron(np.eye(periods), self.V_prior_inv + self.P.T @ P_scaled)
-        XP_matrix = np.zeros([low_frequency_T, periods * k])
-        for j in range(periods):
-            XP_matrix[:, range(j * k, (j+1) * k)] = reshaped_X[:, range(j * p, (j+1) * p)] @ P_scaled
-        F_predicted = np.linalg.solve(Omega_P_term, XP_matrix.T).T
-        
-        # Predict using estimated factors
-        F_sum = np.sum([F_predicted[:, range(j * k, (j+1) * k)] for j in range(periods)])
-        Y_hat = (1/periods) * F_sum @ self.Q.T
-        return Y_hat
