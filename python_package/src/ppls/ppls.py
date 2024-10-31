@@ -343,7 +343,6 @@ class ProbabilisticPLS_MixedFrequency:
     def fit(self, X, Y, periods, standardize = False, track_r2 = False):
         # Obtain sizes
         # X is assumed inputed as high_frequency_T x p; Y is low_frequency_T x q
-        # Currently assumes periods = high_frequency_T / low_frequency_T
         # Future: Implement periods that changes for each low frequency interval
         low_frequency_T, q = Y.shape
         _, p = X.shape
