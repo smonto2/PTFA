@@ -542,10 +542,10 @@ class ProbabilisticPLS_StochasticVolatility:
 
         # Initial values for the parameters (time-varying volatilities start constant)
         L0 = np.random.default_rng().normal(size = [d, k])
-        sigma2_x0 = np.var(X, axis = 0).mean()    # Mean variance across features
-        sigma2_y0 = np.var(Y, axis = 0).mean()    # Mean variance across targets
-        sigma2_x = np.full(T, sigma2_x0)
-        sigma2_y = np.full(T, sigma2_y0)
+        sigma2_x_initial = np.var(X, axis = 0).mean()    # Mean variance across features
+        sigma2_y_initial = np.var(Y, axis = 0).mean()    # Mean variance across targets
+        sigma2_x0 = np.full(T, sigma2_x_initial)
+        sigma2_y0 = np.full(T, sigma2_y_initial)
 
         # Track R-squared of fit if necessary
         if track_r2:
@@ -557,7 +557,7 @@ class ProbabilisticPLS_StochasticVolatility:
         for _ in range(self.max_iter):
             # Expectation step: Update posterior paramater for factors
             for t in range(T):
-                L_scaled_t = np.vstack([L0[:p] / sigma2_x[t], L0[p:] / sigma2_y[t]])
+                L_scaled_t = np.vstack([L0[:p] / sigma2_x0[t], L0[p:] / sigma2_y0[t]])
                 Omega[t] = np.linalg.inv(self.V_prior_inv + L0.T @ L_scaled_t)
                 M[t] = Z[t] @ L_scaled_t @ Omega[t]
             V = np.sum(Omega, axis = 0) + M.T @ M
@@ -570,18 +570,21 @@ class ProbabilisticPLS_StochasticVolatility:
             # Update volatilities using EWMA
             Z_hat = M @ L1.T
             residuals_Z = Z - Z_hat
-            sigma2_x[0] = (1/p) * (np.sum(residuals_Z[0, :p]**2) + np.trace(P.T @ P @ Omega[0]))
-            sigma2_y[0] = (1/q) * (np.sum(residuals_Z[0, p:]**2) + np.trace(Q.T @ Q @ Omega[0]))
+            sigma2_x1 = np.copy(sigma2_x0); sigma2_y1 = np.copy(sigma2_y0)
+            sigma2_x1[0] = (1/p) * (np.sum(residuals_Z[0, :p]**2) + np.trace(P.T @ P @ Omega[0]))
+            sigma2_y1[0] = (1/q) * (np.sum(residuals_Z[0, p:]**2) + np.trace(Q.T @ Q @ Omega[0]))
             for t in range(1, T):
-                sigma2_x_t = (1/p) * (np.sum(residuals_Z[t, :p]**2) + np.trace(P.T @ P @ Omega[t]))
-                sigma2_y_t = (1/q) * (np.sum(residuals_Z[t, p:]**2) + np.trace(Q.T @ Q @ Omega[t]))
-                sigma2_x[t] = self.ewma_lambda_x * sigma2_x[t-1] + (1 - self.ewma_lambda_x) * sigma2_x_t
-                sigma2_y[t] = self.ewma_lambda_y * sigma2_y[t-1] + (1 - self.ewma_lambda_y) * sigma2_y_t
+                hat_sigma2_x_t = (1/p) * (np.sum(residuals_Z[t, :p]**2) + np.trace(P.T @ P @ Omega[t]))
+                hat_sigma2_y_t = (1/q) * (np.sum(residuals_Z[t, p:]**2) + np.trace(Q.T @ Q @ Omega[t]))
+                sigma2_x1[t] = self.ewma_lambda_x * sigma2_x1[t-1] + (1 - self.ewma_lambda_x) * hat_sigma2_x_t
+                sigma2_y1[t] = self.ewma_lambda_y * sigma2_y1[t-1] + (1 - self.ewma_lambda_y) * hat_sigma2_y_t
             
             # Compute distance between iterates
             P_distance = np.linalg.norm(P - L0[:p], "fro")
             Q_distance = np.linalg.norm(Q - L0[p:], "fro")
-            theta_distance = sum([P_distance, Q_distance])
+            sigma_x_distance = np.linalg.norm(sigma2_x1 - sigma2_x0)
+            sigma_y_distance = np.linalg.norm(sigma2_y1 - sigma2_y0)
+            theta_distance = sum([P_distance, Q_distance, sigma_x_distance, sigma_y_distance])
             
             # Prediction and tracking of R-squared across iterations
             if track_r2:
@@ -595,12 +598,14 @@ class ProbabilisticPLS_StochasticVolatility:
             else:
                 # Prepare values for next iteration if convergence not reached
                 L0 = L1
+                sigma2_x0 = sigma2_x1
+                sigma2_y0 = sigma2_y1
                 
         # Update final values of the class with results from EM algorithm
         self.P = P
         self.Q = Q
-        self.sigma2_x = sigma2_x
-        self.sigma2_y = sigma2_y
+        self.sigma2_x = sigma2_x1
+        self.sigma2_y = sigma2_y1
         self.r2_array = np.asarray(r2_list) if track_r2 else None
         
     def fitted(self, X, Y, standardize = False):
@@ -611,7 +616,7 @@ class ProbabilisticPLS_StochasticVolatility:
         Z = np.hstack([X, Y])
         
         # Obtain predicted factors: F_predicted = M (Posterior mean of factors)
-        T = X.shape[0]
+        T, p = X.shape
         F_predicted = np.zeros([T, self.n_components])
         L = np.vstack([self.P, self.Q])
         for t in range(T):
