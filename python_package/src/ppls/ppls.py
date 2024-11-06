@@ -336,7 +336,7 @@ class ProbabilisticPLS_MixedFrequency:
             reshaped_X[t] = np.ravel(X[row_index])
 
         # Fill out information corresponding to last entry (needed if remainder_T > 0)
-        row_index = range(last_T, (low_frequency_T - 1) * periods + remainder_T)
+        row_index = range(last_T, last_T + remainder_T)
         reshaped_X[low_frequency_T - 1, :(p * remainder_T)] = np.ravel(X[row_index])
         return reshaped_X, remainder_T
 
