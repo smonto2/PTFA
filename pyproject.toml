@@ -5,9 +5,9 @@ build-backend = "setuptools.build_meta"
 
 # Package metadata
 [project]
-name = "ppls"
-version = "0.0.2"
-description = "Probabilistic Partial Least Squares"
+name = "ptfm"
+version = "0.0.3"
+description = "Probabilistic Targeted Factor Models"
 dynamic = ["readme"]
 authors = [
   { name = "Miguel C. Herculano", email = "miguel.herculano@glasgow.ac.uk"},
@@ -27,11 +27,11 @@ classifiers = [
 keywords = ["Partial Least Squares", "high-dimensional data", "Expectation-Maximization algorithm", "missing data", "bayesian"]
 
 [project.urls]
-"Homepage" = "https://github.com/smonto2/PPLS"
-"Bug tracking" = "https://github.com/smonto2/PPLS/issues"
+"Homepage" = "https://github.com/smonto2/PTFM"
+"Bug tracking" = "https://github.com/smonto2/PTFM/issues"
 
 [tool.setuptools.dynamic]
-version = {attr = "ppls.VERSION"}
+version = {attr = "PTFM.VERSION"}
 readme = {file = "README.md", content-type = "text/markdown"}
 
 # [tool.setuptools]
