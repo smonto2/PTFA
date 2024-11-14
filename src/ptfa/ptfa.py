@@ -3,7 +3,7 @@ from scipy import linalg, sparse
 from sklearn.metrics import r2_score
 import warnings
 
-class ProbabilisticTFM:
+class ProbabilisticTFA:
     def __init__(self, n_components):
         # Fill in components of the class
         self.n_components = n_components
@@ -143,7 +143,7 @@ class ProbabilisticTFM:
             predicted_variance = self.sigma2_y * np.eye(q) + self.Q @ np.linalg.solve(Omega_X_inverse, self.Q.T)
             return Y_hat, predicted_variance
 
-class ProbabilisticTFM_Missing:
+class ProbabilisticTFA_Missing:
     def __init__(self, n_components):
         # Fill in components of the class
         self.n_components = n_components
@@ -319,7 +319,7 @@ class ProbabilisticTFM_Missing:
             predict_variance = self.sigma2_y * np.eye(q) + self.Q @ np.linalg.solve(Omega_X_inverse, self.Q.T)
             return Y_hat, predict_variance
 
-class ProbabilisticTFM_MixedFrequency:
+class ProbabilisticTFA_MixedFrequency:
     def __init__(self, n_components):
         # Fill in components of the class
         self.n_components = n_components
@@ -502,7 +502,7 @@ class ProbabilisticTFM_MixedFrequency:
         Y_hat = (1/periods) * F_sum @ self.Q.T
         return Y_hat
 
-class ProbabilisticTFM_StochasticVolatility:
+class ProbabilisticTFA_StochasticVolatility:
     def __init__(self, n_components):
         # Fill in components of the class
         self.n_components = n_components
@@ -657,7 +657,7 @@ class ProbabilisticTFM_StochasticVolatility:
         #     predicted_variance = self.sigma2_y * np.eye(q) + self.Q @ np.linalg.solve(Omega_X_inverse, self.Q.T)
         #     return Y_hat, predicted_variance
 
-class ProbabilisticTFM_DynamicFactors:
+class ProbabilisticTFA_DynamicFactors:
     def __init__(self, n_components):
         # Fill in components of the class
         self.n_components = n_components

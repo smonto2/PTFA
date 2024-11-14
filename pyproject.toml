@@ -5,9 +5,9 @@ build-backend = "setuptools.build_meta"
 
 # Package metadata
 [project]
-name = "ptfm"
-version = "0.0.3"
-description = "Probabilistic Targeted Factor Models"
+name = "ptfa"
+version = "0.0.1"
+description = "Probabilistic Targeted Factor Analysis"
 dynamic = ["readme"]
 authors = [
   { name = "Miguel C. Herculano", email = "miguel.herculano@glasgow.ac.uk"},
@@ -27,11 +27,11 @@ classifiers = [
 keywords = ["Partial Least Squares", "high-dimensional data", "Expectation-Maximization algorithm", "missing data", "bayesian"]
 
 [project.urls]
-"Homepage" = "https://github.com/smonto2/PTFM"
-"Bug tracking" = "https://github.com/smonto2/PTFM/issues"
+"Homepage" = "https://github.com/smonto2/PTFA"
+"Bug tracking" = "https://github.com/smonto2/PTFA/issues"
 
 [tool.setuptools.dynamic]
-version = {attr = "PTFM.VERSION"}
+version = {attr = "PTFA.VERSION"}
 readme = {file = "README.md", content-type = "text/markdown"}
 
 # [tool.setuptools]
