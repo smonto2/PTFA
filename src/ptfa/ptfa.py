@@ -14,8 +14,8 @@ class ProbabilisticTFA:
         self.sigma2_y = None
         self.factors = None
 
-    def fit(self, X, Y, standardize = False, V_prior = None, track_r2 = False,
-            tolerance = 1e-6, max_iter = 1000, r2_stop = False, r2_iters = 100):
+    def fit(self, X, Y, standardize = False, V_prior = None, track_r2 = True,
+            tolerance = 1e-6, max_iter = 1000, r2_stop = True, r2_iters = 100):
         # Fill in components of the class controlling algorithm
         self.max_iter = max_iter
         self.tolerance = tolerance
@@ -164,8 +164,8 @@ class ProbabilisticTFA_Missing:
         self.Z_hat_ = None
         self.factors = None
 
-    def fit(self, X, Y, standardize = False,  V_prior = None, track_r2 = False,
-            tolerance = 1e-6, max_iter = 1000, r2_stop = False, r2_iters = 100):
+    def fit(self, X, Y, standardize = False,  V_prior = None, track_r2 = True,
+            tolerance = 1e-6, max_iter = 1000, r2_stop = True, r2_iters = 100):
         # Fill in components of the class
         self.max_iter = max_iter
         self.tolerance = tolerance
@@ -364,8 +364,8 @@ class ProbabilisticTFA_MixedFrequency:
         reshaped_X[low_frequency_T - 1, :(p * remainder_T)] = np.ravel(X[row_index])
         return reshaped_X, remainder_T
 
-    def fit(self, X, Y, periods, standardize = False, V_prior = None, track_r2 = False,
-            tolerance = 1e-6, max_iter = 1000, r2_stop = False, r2_iters = 100):
+    def fit(self, X, Y, periods, standardize = False, V_prior = None, track_r2 = True,
+            tolerance = 1e-6, max_iter = 1000, r2_stop = True, r2_iters = 100):
         # Fill in components of the class
         self.max_iter = max_iter
         self.tolerance = tolerance
@@ -539,7 +539,7 @@ class ProbabilisticTFA_StochasticVolatility:
         self.factors = None
 
     def fit(self, X, Y, standardize = False, ewma_lambda_x = 0.94, ewma_lambda_y = None, V_prior = None,
-            track_r2 = False, tolerance = 1e-6, max_iter = 1000, r2_stop = False, r2_iters = 100):
+            track_r2 = True, tolerance = 1e-6, max_iter = 1000, r2_stop = True, r2_iters = 100):
         # Fill in components of the class
         self.max_iter = max_iter
         self.tolerance = tolerance          # EM stopping tolerance
@@ -739,8 +739,8 @@ class ProbabilisticTFA_DynamicFactors:
         # Discard upper set of elements and return
         return Omega[desired_bands:, :]
 
-    def fit(self, X, Y, standardize = False, V_prior = None, track_r2 = False,
-            tolerance = 1e-6, max_iter = 1000, r2_stop = False, r2_iters = 100):
+    def fit(self, X, Y, standardize = False, V_prior = None, track_r2 = True,
+            tolerance = 1e-6, max_iter = 1000, r2_stop = True, r2_iters = 100):
         # Fill in components of the class
         self.max_iter = max_iter
         self.tolerance = tolerance
