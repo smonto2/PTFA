@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: ptfa
-Version: 0.0.1
+Version: 0.0.3
 Summary: Probabilistic Targeted Factor Analysis
 Author-email: "Miguel C. Herculano" <miguel.herculano@glasgow.ac.uk>, Santiago Montoya-Blandón <Santiago.Montoya-Blandon@glasgow.ac.uk>
 Maintainer-email: "Miguel C. Herculano" <miguel.herculano@glasgow.ac.uk>, Santiago Montoya-Blandón <Santiago.Montoya-Blandon@glasgow.ac.uk>

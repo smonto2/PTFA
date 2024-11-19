@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 # Package metadata
 [project]
 name = "ptfa"
-version = "0.0.1"
+version = "0.0.3"
 description = "Probabilistic Targeted Factor Analysis"
 dynamic = ["readme"]
 authors = [
@@ -31,7 +31,7 @@ keywords = ["Partial Least Squares", "high-dimensional data", "Expectation-Maxim
 "Bug tracking" = "https://github.com/smonto2/PTFA/issues"
 
 [tool.setuptools.dynamic]
-version = {attr = "PTFA.VERSION"}
+version = {attr = "ptfa.VERSION"}
 readme = {file = "README.md", content-type = "text/markdown"}
 
 # [tool.setuptools]
