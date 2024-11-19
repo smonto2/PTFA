@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 # Package metadata
 [project]
 name = "ptfa"
-version = "0.0.3"
+version = "0.1.6"
 description = "Probabilistic Targeted Factor Analysis"
 dynamic = ["readme"]
 authors = [
@@ -14,17 +14,17 @@ authors = [
   { name = "Santiago Montoya-Blandón", email = "Santiago.Montoya-Blandon@glasgow.ac.uk" }
 ]
 maintainers = [
-  { name = "Miguel C. Herculano", email = "miguel.herculano@glasgow.ac.uk"},
-  { name = "Santiago Montoya-Blandón", email = "Santiago.Montoya-Blandon@glasgow.ac.uk" }
+  { name = "Santiago Montoya-Blandón", email = "Santiago.Montoya-Blandon@glasgow.ac.uk" },
+  { name = "Miguel C. Herculano", email = "miguel.herculano@glasgow.ac.uk"}
 ]
-dependencies = ["numpy", "sklearn.metrics"]
+dependencies = ["numpy", "scikit-learn"]
 requires-python = ">=3.8"
 classifiers = [
     "Programming Language :: Python :: 3", # "Programming Language" represents the top-level category, "Python" represents the second-level category, and "3.8" represents the third-level category.
 	"License :: OSI Approved :: MIT License",
 	"Operating System :: OS Independent",    # The software package is not dependent on any specific operating system
 ]
-keywords = ["Partial Least Squares", "high-dimensional data", "Expectation-Maximization algorithm", "missing data", "bayesian"]
+keywords = ["Partial Least Squares", "high-dimensional data", "Expectation-Maximization algorithm", "missing data", "time-series"]
 
 [project.urls]
 "Homepage" = "https://github.com/smonto2/PTFA"

@@ -1,6 +1,8 @@
 LICENSE.md
 README.md
 pyproject.toml
+src/ptfa/__init__.py
+src/ptfa/generation.py
 src/ptfa/ptfa.py
 src/ptfa.egg-info/PKG-INFO
 src/ptfa.egg-info/SOURCES.txt
