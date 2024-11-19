@@ -1,7 +1,6 @@
 import numpy as np
 from scipy import linalg, sparse
 from sklearn.metrics import r2_score
-import warnings
 
 class ProbabilisticTFA:
     def __init__(self, n_components):
@@ -15,7 +14,8 @@ class ProbabilisticTFA:
         self.sigma2_y = None
         self.factors = None
 
-    def fit(self, X, Y, standardize = False, track_r2 = False, tolerance = 1e-6, max_iter = 1000, V_prior = None):
+    def fit(self, X, Y, standardize = False, V_prior = None, track_r2 = False,
+            tolerance = 1e-6, max_iter = 1000, r2_stop = False, r2_iters = 100):
         # Fill in components of the class controlling algorithm
         self.max_iter = max_iter
         self.tolerance = tolerance
@@ -42,11 +42,11 @@ class ProbabilisticTFA:
         sigma2_y0 = np.var(Y, axis = 0).mean()    # Mean variance across targets
 
         # Track R-squared of fit if necessary
-        if track_r2:
+        if track_r2 or r2_stop:
             r2_list = []
         
         # Start EM algorithm main loop
-        for _ in range(self.max_iter):
+        for i in range(self.max_iter):
             # Expectation step: Update posterior paramater for factors
             L_scaled = np.vstack([L0[:p] / sigma2_x0, L0[p:] / sigma2_y0])
             Omega = np.linalg.inv(self.V_prior_inv + L0.T @ L_scaled)
@@ -68,14 +68,22 @@ class ProbabilisticTFA:
             theta_distance = sum([P_distance, Q_distance, sigma_x_distance, sigma_y_distance])
             
             # Prediction and tracking of R-squared across iterations
-            if track_r2:
+            if track_r2 or r2_stop:
+                # Save current value of R-squared
                 Y_hat = M @ Q.T
                 r2_values = r2_score(Y, Y_hat, multioutput = "raw_values")
                 r2_list.append(r2_values)
 
             # Check convergence condition
-            if (theta_distance <= self.tolerance):
-                # Break if distance between each estimate is less than a tolerance
+            convergence = (theta_distance <= self.tolerance)
+            if r2_stop and i >= r2_iters:
+                # Add stopping condition based on history of R-squared across iterations
+                r2_convergence = np.allclose(np.mean(r2_list[-r2_iters:]),    # Average of previous r_iters values
+                                             np.mean(r2_list[-1]),            # Current value
+                                             self.tolerance)
+                convergence = convergence or r2_convergence
+            if convergence:
+                # Break if either distance between each estimate or R-squared decrease is small
                 break
             else:
                 # Prepare values for next iteration if convergence not reached
@@ -156,7 +164,8 @@ class ProbabilisticTFA_Missing:
         self.Z_hat_ = None
         self.factors = None
 
-    def fit(self, X, Y, standardize = False, track_r2 = False, tolerance = 1e-6, max_iter = 1000, V_prior = None):
+    def fit(self, X, Y, standardize = False,  V_prior = None, track_r2 = False,
+            tolerance = 1e-6, max_iter = 1000, r2_stop = False, r2_iters = 100):
         # Fill in components of the class
         self.max_iter = max_iter
         self.tolerance = tolerance
@@ -194,11 +203,11 @@ class ProbabilisticTFA_Missing:
         sigma2_y0 = np.mean(Z_vars[p:])    # Mean variance across targets     
 
         # Track R-squared of fit if necessary
-        if track_r2:
+        if track_r2 or r2_stop:
             r2_list = []
         
         # Start EM algorithm main loop
-        for _ in range(self.max_iter):
+        for i in range(self.max_iter):
             # Expectation step: Update posterior paramater for factors
             L_scaled = np.vstack([L0[:p] / sigma2_x0, L0[p:] / sigma2_y0])
             Omega = np.linalg.inv(self.V_prior_inv + L0.T @ L_scaled)
@@ -224,13 +233,20 @@ class ProbabilisticTFA_Missing:
             theta_distance = sum([P_distance, Q_distance, sigma_x_distance, sigma_y_distance])
             
             # Prediction and tracking of R-squared across iterations
-            if track_r2:
+            if track_r2 or r2_stop:
                 Y_hat = M @ Q.T
                 r2_values = r2_score(Y, Y_hat, multioutput = "raw_values")
                 r2_list.append(r2_values)
 
             # Check convergence condition
-            if (theta_distance <= self.tolerance):
+            convergence = (theta_distance <= self.tolerance)
+            if r2_stop and i >= r2_iters:
+                # Add stopping condition based on history of R-squared across iterations
+                r2_convergence = np.allclose(np.mean(r2_list[-r2_iters:]),    # Average of previous r_iters values
+                                             np.mean(r2_list[-1]),            # Current value
+                                             self.tolerance)
+                convergence = convergence or r2_convergence
+            if convergence:
                 # Break if distance between each estimate is less than a tolerance
                 break
             else:
@@ -348,7 +364,8 @@ class ProbabilisticTFA_MixedFrequency:
         reshaped_X[low_frequency_T - 1, :(p * remainder_T)] = np.ravel(X[row_index])
         return reshaped_X, remainder_T
 
-    def fit(self, X, Y, periods, standardize = False, track_r2 = False, tolerance = 1e-6, max_iter = 1000, V_prior = None):
+    def fit(self, X, Y, periods, standardize = False, V_prior = None, track_r2 = False,
+            tolerance = 1e-6, max_iter = 1000, r2_stop = False, r2_iters = 100):
         # Fill in components of the class
         self.max_iter = max_iter
         self.tolerance = tolerance
@@ -378,12 +395,12 @@ class ProbabilisticTFA_MixedFrequency:
         sigma2_y0 = np.var(Y, axis = 0).mean()    # Mean variance across targets
 
         # Track R-squared of fit if necessary
-        if track_r2:
+        if track_r2 or r2_stop:
             r2_list = []
 
         # Start EM algorithm main loop
         J_periods = np.full([periods, periods], 1 / periods)
-        for _ in range(self.max_iter):
+        for i in range(self.max_iter):
             # Expectation step: Update posterior paramater for factors
             P_scaled = P0 / sigma2_x0
             Q_scaled = Q0 / sigma2_y0
@@ -423,12 +440,19 @@ class ProbabilisticTFA_MixedFrequency:
             theta_distance = sum([P_distance, Q_distance, sigma_x_distance, sigma_y_distance])
             
             # Prediction and tracking of R-squared across iterations
-            if track_r2:
+            if track_r2 or r2_stop:
                 r2_values = r2_score(Y, Y_hat, multioutput = "raw_values")
                 r2_list.append(r2_values)
 
             # Check convergence condition
-            if (theta_distance <= self.tolerance):
+            convergence = (theta_distance <= self.tolerance)
+            if r2_stop and i >= r2_iters:
+                # Add stopping condition based on history of R-squared across iterations
+                r2_convergence = np.allclose(np.mean(r2_list[-r2_iters:]),    # Average of previous r_iters values
+                                             np.mean(r2_list[-1]),            # Current value
+                                             self.tolerance)
+                convergence = convergence or r2_convergence
+            if convergence:
                 # Break if distance between each estimate is less than a tolerance
                 break
             else:
@@ -514,8 +538,8 @@ class ProbabilisticTFA_StochasticVolatility:
         self.sigma2_y = None
         self.factors = None
 
-    def fit(self, X, Y, standardize = False, track_r2 = False, tolerance = 1e-6, max_iter = 1000, V_prior = None,
-                 ewma_lambda_x = 0.94, ewma_lambda_y = None):
+    def fit(self, X, Y, standardize = False, ewma_lambda_x = 0.94, ewma_lambda_y = None, V_prior = None,
+            track_r2 = False, tolerance = 1e-6, max_iter = 1000, r2_stop = False, r2_iters = 100):
         # Fill in components of the class
         self.max_iter = max_iter
         self.tolerance = tolerance          # EM stopping tolerance
@@ -548,13 +572,13 @@ class ProbabilisticTFA_StochasticVolatility:
         sigma2_y = np.full(T, sigma2_y_initial)
 
         # Track R-squared of fit if necessary
-        if track_r2:
+        if track_r2 or r2_stop:
             r2_list = []
         
         # Start EM algorithm main loop
         M = np.zeros([T, k])
         Omega = np.zeros([T, k, k])
-        for _ in range(self.max_iter):
+        for i in range(self.max_iter):
             # Expectation step: Update posterior paramater for factors
             for t in range(T):
                 L_scaled_t = np.vstack([L0[:p] / sigma2_x[t], L0[p:] / sigma2_y[t]])
@@ -584,12 +608,19 @@ class ProbabilisticTFA_StochasticVolatility:
             theta_distance = sum([P_distance, Q_distance])
             
             # Prediction and tracking of R-squared across iterations
-            if track_r2:
+            if track_r2 or r2_stop:
                 r2_values = r2_score(Y, Z_hat[:, p:], multioutput = "raw_values")
                 r2_list.append(r2_values)
 
             # Check convergence condition
-            if (theta_distance <= self.tolerance):
+            convergence = (theta_distance <= self.tolerance)
+            if r2_stop and i >= r2_iters:
+                # Add stopping condition based on history of R-squared across iterations
+                r2_convergence = np.allclose(np.mean(r2_list[-r2_iters:]),    # Average of previous r_iters values
+                                             np.mean(r2_list[-1]),            # Current value
+                                             self.tolerance)
+                convergence = convergence or r2_convergence
+            if convergence:
                 # Break if distance between each estimate is less than a tolerance
                 break
             else:
@@ -708,7 +739,8 @@ class ProbabilisticTFA_DynamicFactors:
         # Discard upper set of elements and return
         return Omega[desired_bands:, :]
 
-    def fit(self, X, Y, standardize = False, track_r2 = False, tolerance = 1e-6, max_iter = 1000, V_prior = None):
+    def fit(self, X, Y, standardize = False, V_prior = None, track_r2 = False,
+            tolerance = 1e-6, max_iter = 1000, r2_stop = False, r2_iters = 100):
         # Fill in components of the class
         self.max_iter = max_iter
         self.tolerance = tolerance
@@ -737,11 +769,11 @@ class ProbabilisticTFA_DynamicFactors:
         f0_0 = np.zeros(k)
 
         # Track R-squared of fit if necessary
-        if track_r2:
+        if track_r2 or r2_stop:
             r2_list = []
         
         # Start EM algorithm main loop
-        for _ in range(self.max_iter):
+        for i in range(self.max_iter):
             ### Expectation step: Update posterior paramater for factors using sparse matrix computations ---
             L_scaled = np.vstack([L0[:p] / sigma2_x0, L0[p:] / sigma2_y0])
             L_scaled_L = L0.T @ L_scaled
@@ -817,7 +849,14 @@ class ProbabilisticTFA_DynamicFactors:
                 r2_list.append(r2_values)
 
             # Check convergence condition
-            if (theta_distance <= self.tolerance):
+            convergence = (theta_distance <= self.tolerance)
+            if r2_stop and i >= r2_iters:
+                # Add stopping condition based on history of R-squared across iterations
+                r2_convergence = np.allclose(np.mean(r2_list[-r2_iters:]),    # Average of previous r_iters values
+                                             np.mean(r2_list[-1]),            # Current value
+                                             self.tolerance)
+                convergence = convergence or r2_convergence
+            if convergence:
                 # Break if distance between each estimate is less than a tolerance
                 break
             else:

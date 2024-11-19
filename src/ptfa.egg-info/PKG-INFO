@@ -1,0 +1,19 @@
+Metadata-Version: 2.1
+Name: ptfa
+Version: 0.0.1
+Summary: Probabilistic Targeted Factor Analysis
+Author-email: "Miguel C. Herculano" <miguel.herculano@glasgow.ac.uk>, Santiago Montoya-Blandón <Santiago.Montoya-Blandon@glasgow.ac.uk>
+Maintainer-email: "Miguel C. Herculano" <miguel.herculano@glasgow.ac.uk>, Santiago Montoya-Blandón <Santiago.Montoya-Blandon@glasgow.ac.uk>
+Project-URL: Homepage, https://github.com/smonto2/PTFA
+Project-URL: Bug tracking, https://github.com/smonto2/PTFA/issues
+Keywords: Partial Least Squares,high-dimensional data,Expectation-Maximization algorithm,missing data,bayesian
+Classifier: Programming Language :: Python :: 3
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: OS Independent
+Requires-Python: >=3.8
+Description-Content-Type: text/markdown
+License-File: LICENSE.md
+Requires-Dist: numpy
+Requires-Dist: sklearn.metrics
+
+The `ptfa` package introduces routines to obtain factors and loadings from features variables used to predict target variables. This is accomplished through a probabilistic version of Partial Least Squares (PLS) that performs efficient targeted factor extraction. The package provides an array of expectation maximization (EM) algorithms for learning the parameters of this model under a wide range of real-world economic data situations. This includes standard cross-sectional data, and includes extension that can additionally account for missing data (both at-random and in mixed-frequency settings), stochastic volatility or dynamic relationships.
