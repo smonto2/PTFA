@@ -8,7 +8,7 @@ The framework balances flexibility and efficiency, providing an alternative to t
 
 - Joint estimation of latent factors and parameters.
 - Robust against noise, missing data, and model uncertainty.
-- Extensible to mixed-frequency data and dynamic factor models.
+- Extensible to stochastic volatility, mixed-frequency data and dynamic factor models.
 - Competitive performance in high-dimensional forecasting tasks.
 
 ## Installation
