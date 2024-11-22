@@ -3,6 +3,55 @@ from scipy import linalg, sparse
 from sklearn.metrics import r2_score
 
 class ProbabilisticTFA:
+    """
+    Probabilistic Targeted Factor Analysis (PTFA) class for fitting and predicting using a probabilistic model.
+    Attributes:
+        n_components (int): Number of components (factors) to estimate.
+        P (np.ndarray): Estimated loadings for predictors.
+        Q (np.ndarray): Estimated loadings for targets.
+        sigma2_x (float): Estimated variance for predictors.
+        sigma2_y (float): Estimated variance for targets.
+        factors (np.ndarray): Predicted factors.
+        V_prior (np.ndarray): Prior covariance matrix for factors.
+        max_iter (int): Maximum number of iterations for the EM algorithm.
+        tolerance (float): Convergence tolerance for the EM algorithm.
+        r2_array (np.ndarray): Array of R-squared values across iterations if tracking is enabled.
+    Methods:
+        __init__(self, n_components):
+            Initializes the PTFA model with the specified number of components.
+        fit(self, X, Y, standardize=False, V_prior=None, track_r2=True, tolerance=1e-6, max_iter=1000, r2_stop=True, r2_iters=100):
+            Fits the PTFA model to the given data using the EM algorithm.
+            Parameters:
+                X (np.ndarray): Predictor data matrix of shape (T, p).
+                Y (np.ndarray): Target data matrix of shape (T, q).
+                standardize (bool): Whether to standardize the data before fitting.
+                V_prior (np.ndarray): Prior covariance matrix for factors.
+                track_r2 (bool): track R-squared values across iterations.
+                tolerance (float): Convergence tolerance for the EM algorithm.
+                max_iter (int): Maximum number of iterations for the EM algorithm.
+                r2_stop (bool): Whether to stop based on R-squared convergence.
+                r2_iters (int): Number of iterations to consider for R-squared convergence.
+        fitted(self, X, Y, standardize=False, prediction_variance=False):
+            Computes the fitted values and optionally the prediction variance.
+            Parameters:
+                X (np.ndarray): Predictor data matrix of shape (T, p).
+                Y (np.ndarray): Target data matrix of shape (T, q).
+                standardize (bool): Whether to standardize the data before fitting.
+                prediction_variance (bool): Whether to compute the prediction variance.
+            Returns:
+                np.ndarray: Predicted target values.
+                np.ndarray (optional): Prediction variance matrix if prediction_variance is True.
+        predict(self, X, standardize=False, prediction_variance=False, method="mean"):
+            Predicts target values using the fitted PTFA model.
+            Parameters:
+                X (np.ndarray): Predictor data matrix of shape (T, p).
+                standardize (bool): Whether to standardize the data before predicting.
+                prediction_variance (bool): Whether to compute the prediction variance.
+                method (str): Method to use for prediction ("mean" or "loading").
+            Returns:
+                np.ndarray: Predicted target values.
+                np.ndarray (optional): Prediction variance matrix if prediction_variance is True.
+    """
     def __init__(self, n_components):
         # Fill in components of the class
         self.n_components = n_components
@@ -152,6 +201,31 @@ class ProbabilisticTFA:
             return Y_hat, predicted_variance
 
 class ProbabilisticTFA_Missing:
+    """
+    Probabilistic Targeted Factor Analysis (TFA) with Missing Data.
+    This class implements a probabilistic tensor factor analysis model that can handle missing data using the Expectation-Maximization (EM) algorithm.
+    Attributes:
+        n_components (int): Number of components (latent factors).
+        P (np.ndarray): Factor loadings for predictors.
+        Q (np.ndarray): Factor loadings for targets.
+        sigma2_x (float): Variance of the predictors.
+        sigma2_y (float): Variance of the targets.
+        Z_hat_ (np.ndarray): Imputed data matrix.
+        factors (np.ndarray): Predicted factors.
+        max_iter (int): Maximum number of iterations for the EM algorithm.
+        tolerance (float): Convergence tolerance for the EM algorithm.
+        V_prior (np.ndarray): Prior covariance matrix for the factors.
+        V_prior_inv (np.ndarray): Inverse of the prior covariance matrix for the factors.
+        r2_array (np.ndarray): Array of R-squared values across iterations.
+        Z_imputed (np.ndarray): Imputed data matrix after fitting.
+    Methods:
+        fit(X, Y, standardize=False, V_prior=None, track_r2=True, tolerance=1e-6, max_iter=1000, r2_stop=True, r2_iters=100):
+            Fit the probabilistic TFA model to the data.
+        fitted(X, Y, standardize=False, prediction_variance=False):
+            Obtain the fitted values and optionally the prediction variance.
+        predict(X, standardize=False, prediction_variance=False, method="mean"):
+            Predict the target values using the fitted model and optionally compute the prediction variance.
+    """
     def __init__(self, n_components):
         # Fill in components of the class
         self.n_components = n_components
@@ -336,6 +410,41 @@ class ProbabilisticTFA_Missing:
             return Y_hat, predict_variance
 
 class ProbabilisticTFA_MixedFrequency:
+    """
+    A class to perform Probabilistic Targeted Factor Analysis (TFA) with mixed frequency data.
+    Attributes
+    ----------
+    n_components : int
+        Number of latent factors.
+    P : np.ndarray
+        Factor loadings for high-frequency predictors.
+    Q : np.ndarray
+        Factor loadings for low-frequency targets.
+    sigma2_x : float
+        Variance of high-frequency predictors.
+    sigma2_y : float
+        Variance of low-frequency targets.
+    factors : np.ndarray
+        Estimated factors.
+    V_prior : np.ndarray
+        Prior covariance matrix for factors.
+    max_iter : int
+        Maximum number of iterations for the EM algorithm.
+    tolerance : float
+        Tolerance for convergence of the EM algorithm.
+    r2_array : np.ndarray
+        Array of R-squared values across iterations.
+    Methods
+    -------
+    highfrequency_to_lowfrequency_reshape(X, low_frequency_T, periods):
+        Reshape high-frequency data to low-frequency data.
+    fit(X, Y, periods, standardize=False, V_prior=None, track_r2=True, tolerance=1e-6, max_iter=1000, r2_stop=True, r2_iters=100):
+        Fit the model using the EM algorithm.
+    fitted(X, Y, periods, standardize=False):
+        Obtain fitted values for the low-frequency targets.
+    predict(X, low_frequency_T, periods, standardize=False):
+        Predict low-frequency targets using the fitted model.
+    """
     def __init__(self, n_components):
         # Fill in components of the class
         self.n_components = n_components
@@ -527,6 +636,31 @@ class ProbabilisticTFA_MixedFrequency:
         return Y_hat
 
 class ProbabilisticTFA_StochasticVolatility:
+    """
+    A class to perform Probabilistic Targeted Factor Analysis (PTFA) with Stochastic Volatility.
+    Attributes:
+        n_components (int): Number of components (factors).
+        P (np.ndarray): Factor loadings for predictors.
+        Q (np.ndarray): Factor loadings for targets.
+        sigma2_x (np.ndarray): Time-varying volatilities for predictors equations.
+        sigma2_y (np.ndarray): Time-varying volatilities for targets equations.
+        factors (np.ndarray): Predicted factors.
+        max_iter (int): Maximum number of iterations for the EM algorithm.
+        tolerance (float): Convergence tolerance for the EM algorithm.
+        ewma_lambda_x (float): EWMA smoothing parameter for predictors.
+        ewma_lambda_y (float): EWMA smoothing parameter for targets.
+        V_prior (np.ndarray): Prior covariance matrix for factors.
+        r2_array (np.ndarray): Array of R-squared values across iterations.
+    Methods:
+        __init__(self, n_components):
+            Initializes the class with the specified number of components.
+        fit(self, X, Y, standardize=False, ewma_lambda_x=0.94, ewma_lambda_y=None, V_prior=None, track_r2=True, tolerance=1e-6, max_iter=1000, r2_stop=True, r2_iters=100):
+            Fits the model to the data using the EM algorithm.
+        fitted(self, X, Y, standardize=False):
+            Returns the predicted targets using the fitted model.
+        predict(self, X, standardize=False):
+            Predicts the targets using the predictors and the fitted model.
+    """
     def __init__(self, n_components):
         # Fill in components of the class
         self.n_components = n_components
@@ -689,6 +823,36 @@ class ProbabilisticTFA_StochasticVolatility:
         #     return Y_hat, predicted_variance
 
 class ProbabilisticTFA_DynamicFactors:
+    """    
+    Probabilistic Targeted Factor Analysis (PTFA) with Dynamic Factors
+    This class implements a PTFA model with dynamic factors anduses an Expectation-Maximization (EM) algorithm to fit the model parameters.
+    Attributes:
+        n_components (int): Number of components (factors) in the model.
+        P (np.ndarray): Factor loadings for predictors.
+        Q (np.ndarray): Factor loadings for targets.
+        sigma2_x (float): Variance of the predictors.
+        sigma2_y (float): Variance of the targets.
+        A (np.ndarray): Autoregressive coefficients.
+        f0 (np.ndarray): Initial condition for the factors.
+        factors (np.ndarray): Predicted factors.
+        V_prior (np.ndarray): Prior covariance matrix for the factors.
+        V_prior_inv (np.ndarray): Inverse of the prior covariance matrix.
+        max_iter (int): Maximum number of iterations for the EM algorithm.
+        tolerance (float): Convergence tolerance for the EM algorithm.
+        r2_array (np.ndarray): Array of R-squared values across iterations.
+    Methods:
+        __init__(self, n_components):
+            Initializes the ProbabilisticTFA_DynamicFactors class with the specified number of components.
+        bands_cholesky(self, cholesky_banded, desired_bands=0):
+            Computes the inverse elements of a banded matrix using its Cholesky decomposition.
+        fit(self, X, Y, standardize=False, V_prior=None, track_r2=True, tolerance=1e-6, max_iter=1000, r2_stop=True, r2_iters=100):
+            Fits the model to the given data using the EM algorithm.
+        fitted(self, X, Y, standardize=False, prediction_variance=False):
+            Computes the fitted values for the given data.
+        predict(self, X, standardize=False, prediction_variance=False, method="mean"):
+            Predicts the target values for the given predictors.
+    """
+
     def __init__(self, n_components):
         # Fill in components of the class
         self.n_components = n_components
