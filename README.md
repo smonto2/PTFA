@@ -38,13 +38,17 @@ model = ProbabilisticTFA(n_components=3)
 model.fit(X, Y)
 
 # Calculate in-sample predictions
-Y_predicted = model.fitted(X, Y)
+Y_predicted = model.fitted()
 
 # Calculate out-of-sample forecasts
+X = np.random.rand(100, 10)
 Y_forecast = model.predict(X)
 
 print("Predicted targets:")
 print(Y_predicted)
+
+print("Forecasted targets:")
+print(Y_forecast)
 
 ```
 
