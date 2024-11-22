@@ -75,31 +75,27 @@ class ProbabilisticTFA:
         _, q = Y.shape
         d = p + q
         
-        # Obtain indices of missing observations to create masked objects
+        # Obtain indices of missing observations to create masked objects and initial imputation step
         if not np.ma.isMaskedArray(X):
             X_missing_index = np.isnan(X)
             if np.any(X_missing_index):
-                X = np.ma.MaskedArray(data=X, mask=X_missing_index, fill_value=0.0)
+                X[X_missing_index] = 0.0
         else:
             X_missing_index = X.mask
-            X.set_fill_value(value = 0.0)
+            X = X.set_fill_value(value=0.0).filled()
         if not np.ma.isMaskedArray(Y):
             Y_missing_index = np.isnan(Y)
             if np.any(Y_missing_index):
-                Y = np.ma.MaskedArray(data=Y, mask=Y_missing_index, fill_value=0.0)
+                Y[Y_missing_index] = 0.0
         else:
             Y_missing_index = Y.mask
-            Y.set_fill_value(value = 0.0)
+            Y = Y.set_fill_value(value = 0.0).filled()
 
-        # Center and scale predictors and targets separately
+        # Center and scale predictors and targets separately before stacking
         if standardize:
-            X = (X - X.mean(axis = 0)) / X.std(axis = 0)
-            Y = (Y - Y.mean(axis = 0)) / Y.std(axis = 0)
-        
-        # If any elements are missing, do an initial imputation step
-        Z = np.zeros([T, d])
-        Z[:, :p] = X.filled() if np.any(X_missing_index) else X
-        Z[:, p:] = Y.filled() if np.any(X_missing_index) else Y
+            X = (X - np.mean(X, axis = 0, where = np.logical_not(X_missing_index))) / np.std(X, axis = 0, where = np.logical_not(X_missing_index))
+            Y = (Y - np.mean(Y, axis = 0, where = np.logical_not(Y_missing_index))) / np.std(Y, axis = 0, where = np.logical_not(Y_missing_index))
+        Z = np.hstack([X, Y])
         
         # Initial values for the parameters
         L0 = np.random.default_rng().normal(size = [d, k])
@@ -119,10 +115,14 @@ class ProbabilisticTFA:
 
             # If any missing data, update imputation step using current EM fit
             if np.any(X_missing_index):
-                Z[:, :p] = X.filled(M @ L0[:p].T)
+                X_hat = M @ L0[:p].T
+                X[X_missing_index] = X_hat[X_missing_index]
+                Z[:, :p] = X
             if np.any(Y_missing_index):
-                Z[:, p:] = Y.filled(M @ L0[p:].T)
-            
+                Y_hat = M @ L0[p:].T
+                Y[Y_missing_index] = Y_hat[Y_missing_index]
+                Z[:, p:] = Y
+
             # Maximization step: Update factor loadings and variances
             V = T * Omega + M.T @ M
             L1 = np.linalg.solve(V, M.T @ Z).T
@@ -184,21 +184,22 @@ class ProbabilisticTFA:
             return Y_hat, Y_hat_variance
 
     def predict(self, X, standardize = True, compute_variance = False):
-        # Obtain indices of missing observations to create masked object
+        # Obtain indices of missing observations and impute using EM fit
         if not np.ma.isMaskedArray(X):
             X_missing_index = np.isnan(X)
             if np.any(X_missing_index):
-                X = np.ma.MaskedArray(data=X, mask=X_missing_index, fill_value=0.0)
+                X_hat = self.factors @ self.P.T
+                X[X_missing_index] = X_hat[X_missing_index]
         else:
             X_missing_index = X.mask
-            X.set_fill_value(value = 0.0)
-
-        # Center and scale predictors and impute using EM fit if required
-        if standardize:
-            X = (X - X.mean(axis = 0)) / X.std(axis = 0)
-        if np.any(X_missing_index):
-            X = X.filled(self.factors @ self.P.T)
+            if np.any(X_missing_index):
+                X_hat = self.factors @ self.P.T
+                X = X.filled(X_hat)            
         
+        # Center and scale predictors if required
+        if standardize:
+            X = (X - np.mean(X, axis = 0, where = np.logical_not(X_missing_index))) / np.std(X, axis = 0, where = np.logical_not(X_missing_index))
+                
         # Obtains predicted factors using X only: F_predicted = M (Posterior mean of factors)
         P_scaled = self.P / self.sigma2_x
         Omega_X_inverse = self.V_prior_inv + self.P.T @ P_scaled
@@ -246,7 +247,7 @@ class ProbabilisticTFA_MixedFrequency:
         Reshape high-frequency data to low-frequency data.
     fit(X, Y, periods, standardize=True, V_prior=None, track_r2=True, tolerance=1e-6, max_iter=1000, r2_stop=True, r2_iters=100):
         Fit the model using the EM algorithm.
-    fitted(X, Y, periods, standardize=True):
+    fitted(compute_variance=False):
         Obtain fitted values for the low-frequency targets.
     predict(X, low_frequency_T, periods, standardize=True):
         Predict low-frequency targets using the fitted model.
@@ -300,7 +301,7 @@ class ProbabilisticTFA_MixedFrequency:
         _, p = X.shape
         self.low_frequency_T = low_frequency_T
         
-        # Obtain indices of missing observations to create masked object
+        # Obtain indices of missing observations
         if not np.ma.isMaskedArray(X):
             X_missing_index = np.isnan(X)
         else:
@@ -309,19 +310,16 @@ class ProbabilisticTFA_MixedFrequency:
         if not np.ma.isMaskedArray(Y):
             Y_missing_index = np.isnan(Y)
             if np.any(Y_missing_index):
-                Y = np.ma.MaskedArray(data=Y, mask=Y_missing_index, fill_value=0.0)
+                Y[Y_missing_index] = 0.0
         else:
             Y_missing_index = Y.mask
-            Y.set_fill_value(value = 0.0)   
+            Y = Y.set_fill_value(value = 0.0).filled()
 
         # Center and scale predictors and targets separately
-        # Also initial imputation step
         if standardize:
             X = (X - np.mean(X, axis = 0, where = np.logical_not(X_missing_index))) / np.std(X, axis = 0, where = np.logical_not(X_missing_index))
-            Y = (Y - Y.mean(axis = 0)) / Y.std(axis = 0)
-        if np.any(Y_missing_index):
-            Y = Y.filled(0.0)
-
+            Y = (Y - np.mean(Y, axis = 0, where = np.logical_not(Y_missing_index))) / np.std(Y, axis = 0, where = np.logical_not(Y_missing_index))
+        
         # Re-shape X into an low_frequency_T x (p * periods)
         # Also initial imputation step
         reshaped_X = self.highfrequency_to_lowfrequency_reshape(X, low_frequency_T, periods)
@@ -366,7 +364,7 @@ class ProbabilisticTFA_MixedFrequency:
                 reshaped_X[X_missing_index] = reshaped_X_hat[X_missing_index]
             if np.any(Y_missing_index):
                 Y_hat = (1/periods) * M_sum @ Q0.T
-                Y = Y.filled(Y_hat)
+                Y[Y_missing_index] = Y_hat[Y_missing_index]
             
             # Maximization step: Update factor loadings and variances
             V_array = np.reshape(low_frequency_T * Omega + M.T @ M, [periods, k, periods, k]).transpose(0, 2, 1, 3)
@@ -438,16 +436,14 @@ class ProbabilisticTFA_MixedFrequency:
         _, p = X.shape
         k = self.n_components
 
-        # Obtain indices of missing observations to create masked object
+        # Obtain indices of missing observations
         if not np.ma.isMaskedArray(X):
             X_missing_index = np.isnan(X)
-            if np.any(X_missing_index):
-                X = np.ma.MaskedArray(data=X, mask=X_missing_index, fill_value=0.0)
         else:
             X_missing_index = X.mask
-            X.set_fill_value(value = 0.0)
+            X = X.data
         
-        # Center and scale predictors
+        # Center and scale predictors if required
         if standardize:
             X = (X - np.mean(X, axis = 0, where = np.logical_not(X_missing_index))) / np.std(X, axis = 0, where = np.logical_not(X_missing_index))
 
@@ -458,7 +454,7 @@ class ProbabilisticTFA_MixedFrequency:
         X_missing_index = np.isnan(reshaped_X)
         if np.any(X_missing_index):
             reshaped_X_hat = np.hstack([self.factors[:, range(j * k, (j+1) * k)] @ self.P.T for j in range(self.periods)])
-            reshaped_X = reshaped_X.filled(reshaped_X_hat)
+            reshaped_X[X_missing_index] = reshaped_X_hat[X_missing_index]
             
         # Obtain predicted factors: F_predicted = M (Posterior mean of factors)
         P_scaled = self.P / self.sigma2_x
@@ -539,31 +535,27 @@ class ProbabilisticTFA_StochasticVolatility:
         _, q = Y.shape
         d = p + q
 
-        # Obtain indices of missing observations to create masked objects
+       # Obtain indices of missing observations to create masked objects and initial imputation step
         if not np.ma.isMaskedArray(X):
             X_missing_index = np.isnan(X)
             if np.any(X_missing_index):
-                X = np.ma.MaskedArray(data=X, mask=X_missing_index, fill_value=0.0)
+                X[X_missing_index] = 0.0
         else:
             X_missing_index = X.mask
-            X.set_fill_value(value = 0.0)
+            X = X.set_fill_value(value=0.0).filled()
         if not np.ma.isMaskedArray(Y):
             Y_missing_index = np.isnan(Y)
             if np.any(Y_missing_index):
-                Y = np.ma.MaskedArray(data=Y, mask=Y_missing_index, fill_value=0.0)
+                Y[Y_missing_index] = 0.0
         else:
             Y_missing_index = Y.mask
-            Y.set_fill_value(value = 0.0)
+            Y = Y.set_fill_value(value = 0.0).filled()
 
-        # Center and scale predictors and targets separately
+        # Center and scale predictors and targets separately before stacking
         if standardize:
-            X = (X - X.mean(axis = 0)) / X.std(axis = 0)
-            Y = (Y - Y.mean(axis = 0)) / Y.std(axis = 0)
-        
-        # If any elements are missing, do an initial imputation step
-        Z = np.zeros([T, d])
-        Z[:, :p] = X.filled() if np.any(X_missing_index) else X
-        Z[:, p:] = Y.filled() if np.any(X_missing_index) else Y
+            X = (X - np.mean(X, axis = 0, where = np.logical_not(X_missing_index))) / np.std(X, axis = 0, where = np.logical_not(X_missing_index))
+            Y = (Y - np.mean(Y, axis = 0, where = np.logical_not(Y_missing_index))) / np.std(Y, axis = 0, where = np.logical_not(Y_missing_index))
+        Z = np.hstack([X, Y])
 
         # Initial values for the parameters (time-varying volatilities start constant)
         L0 = np.random.default_rng().normal(size = [d, k])
@@ -589,9 +581,13 @@ class ProbabilisticTFA_StochasticVolatility:
 
             # If any missing data, update imputation step using current EM fit
             if np.any(X_missing_index):
-                Z[:, :p] = X.filled(M @ L0[:p].T)
+                X_hat = M @ L0[:p].T
+                X[X_missing_index] = X_hat[X_missing_index]
+                Z[:, :p] = X
             if np.any(Y_missing_index):
-                Z[:, p:] = Y.filled(M @ L0[p:].T)
+                Y_hat = M @ L0[p:].T
+                Y[Y_missing_index] = Y_hat[Y_missing_index]
+                Z[:, p:] = Y
 
             # Maximization step: Update factor loadings
             L1 = np.linalg.solve(V, M.T @ Z).T
@@ -659,20 +655,21 @@ class ProbabilisticTFA_StochasticVolatility:
             return Y_hat, Y_hat_variance
 
     def predict(self, X, standardize = True, compute_variance = False):
-        # Obtain indices of missing observations to create masked objects
+        # Obtain indices of missing observations and impute using EM fit
         if not np.ma.isMaskedArray(X):
             X_missing_index = np.isnan(X)
             if np.any(X_missing_index):
-                X = np.ma.MaskedArray(data=X, mask=X_missing_index, fill_value=0.0)
+                X_hat = self.factors @ self.P.T
+                X[X_missing_index] = X_hat[X_missing_index]
         else:
             X_missing_index = X.mask
-            X.set_fill_value(value = 0.0)
+            if np.any(X_missing_index):
+                X_hat = self.factors @ self.P.T
+                X = X.filled(X_hat)            
         
-        # Center and scale predictors and impute using EM fit if required
+        # Center and scale predictors if required
         if standardize:
-            X = (X - X.mean(axis = 0)) / X.std(axis = 0)
-        if np.any(X_missing_index):
-            X = X.filled(self.factors @ self.P.T)
+            X = (X - np.mean(X, axis = 0, where = np.logical_not(X_missing_index))) / np.std(X, axis = 0, where = np.logical_not(X_missing_index))
         
         # Obtains predicted factors using X only: F_predicted = M (Posterior mean of factors)
         P_scaled = self.P / self.sigma2_x.mean()
@@ -787,31 +784,27 @@ class ProbabilisticTFA_DynamicFactors:
         _, q = Y.shape
         d = p + q
 
-        # Obtain indices of missing observations to create masked objects
+        # Obtain indices of missing observations to create masked objects and initial imputation step
         if not np.ma.isMaskedArray(X):
             X_missing_index = np.isnan(X)
             if np.any(X_missing_index):
-                X = np.ma.MaskedArray(data=X, mask=X_missing_index, fill_value=0.0)
+                X[X_missing_index] = 0.0
         else:
             X_missing_index = X.mask
-            X.set_fill_value(value = 0.0)
+            X = X.set_fill_value(value=0.0).filled()
         if not np.ma.isMaskedArray(Y):
             Y_missing_index = np.isnan(Y)
             if np.any(Y_missing_index):
-                Y = np.ma.MaskedArray(data=Y, mask=Y_missing_index, fill_value=0.0)
+                Y[Y_missing_index] = 0.0
         else:
             Y_missing_index = Y.mask
-            Y.set_fill_value(value = 0.0)
+            Y = Y.set_fill_value(value = 0.0).filled()
 
-        # Center and scale predictors and targets separately
+        # Center and scale predictors and targets separately before stacking
         if standardize:
-            X = (X - X.mean(axis = 0)) / X.std(axis = 0)
-            Y = (Y - Y.mean(axis = 0)) / Y.std(axis = 0)
-        
-        # If any elements are missing, do an initial imputation step
-        Z = np.zeros([T, d])
-        Z[:, :p] = X.filled() if np.any(X_missing_index) else X
-        Z[:, p:] = Y.filled() if np.any(X_missing_index) else Y
+            X = (X - np.mean(X, axis = 0, where = np.logical_not(X_missing_index))) / np.std(X, axis = 0, where = np.logical_not(X_missing_index))
+            Y = (Y - np.mean(Y, axis = 0, where = np.logical_not(Y_missing_index))) / np.std(Y, axis = 0, where = np.logical_not(Y_missing_index))
+        Z = np.hstack([X, Y])
 
         # Initial values for the parameters
         L0 = np.random.default_rng().normal(size = [d, k])
@@ -854,9 +847,13 @@ class ProbabilisticTFA_DynamicFactors:
             
             # If any missing data, update imputation step using current EM fit
             if np.any(X_missing_index):
-                Z[:, :p] = X.filled(M @ L0[:p].T)
+                X_hat = M @ L0[:p].T
+                X[X_missing_index] = X_hat[X_missing_index]
+                Z[:, :p] = X
             if np.any(Y_missing_index):
-                Z[:, p:] = Y.filled(M @ L0[p:].T)
+                Y_hat = M @ L0[p:].T
+                Y[Y_missing_index] = Y_hat[Y_missing_index]
+                Z[:, p:] = Y
 
             ### Maximization step: Update factor loadings and variances ---
             # Calculate banded elements of the posterior covariance using lower-level function
@@ -949,20 +946,21 @@ class ProbabilisticTFA_DynamicFactors:
             return Y_hat, Y_hat_variance
 
     def predict(self, X, standardize = True, compute_variance = False):
-        # Obtain indices of missing observations to create masked objects
+        # Obtain indices of missing observations and impute using EM fit
         if not np.ma.isMaskedArray(X):
             X_missing_index = np.isnan(X)
             if np.any(X_missing_index):
-                X = np.ma.MaskedArray(data=X, mask=X_missing_index, fill_value=0.0)
+                X_hat = self.factors @ self.P.T
+                X[X_missing_index] = X_hat[X_missing_index]
         else:
             X_missing_index = X.mask
-            X.set_fill_value(value = 0.0)
+            if np.any(X_missing_index):
+                X_hat = self.factors @ self.P.T
+                X = X.filled(X_hat)            
         
-        # Center and scale predictors and impute using EM fit if required
+        # Center and scale predictors if required
         if standardize:
-            X = (X - X.mean(axis = 0)) / X.std(axis = 0)
-        if np.any(X_missing_index):
-            X = X.filled(self.factors @ self.P.T)
+            X = (X - np.mean(X, axis = 0, where = np.logical_not(X_missing_index))) / np.std(X, axis = 0, where = np.logical_not(X_missing_index))
         
         # Compute some necessary quantities using dynamic information estimates
         T = X.shape[0]
@@ -1002,5 +1000,3 @@ class ProbabilisticTFA_DynamicFactors:
             q = self.Q.shape[0]
             Y_hat_variance = self.sigma2_y * np.eye(q) + self.Q @ np.linalg.solve(Omega_0_inv_X, self.Q.T)
             return Y_hat, Y_hat_variance
-
-                

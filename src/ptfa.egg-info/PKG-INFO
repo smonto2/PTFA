@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: ptfa
-Version: 0.2.6
+Version: 0.2.8
 Summary: Probabilistic Targeted Factor Analysis
 Author-email: "Miguel C. Herculano" <miguel.herculano@glasgow.ac.uk>, Santiago Montoya-Blandón <Santiago.Montoya-Blandon@glasgow.ac.uk>
 Maintainer-email: Santiago Montoya-Blandón <Santiago.Montoya-Blandon@glasgow.ac.uk>, "Miguel C. Herculano" <miguel.herculano@glasgow.ac.uk>
@@ -56,13 +56,17 @@ model = ProbabilisticTFA(n_components=3)
 model.fit(X, Y)
 
 # Calculate in-sample predictions
-Y_predicted = model.fitted(X, Y)
+Y_predicted = model.fitted()
 
 # Calculate out-of-sample forecasts
+X = np.random.rand(100, 10)
 Y_forecast = model.predict(X)
 
 print("Predicted targets:")
 print(Y_predicted)
+
+print("Forecasted targets:")
+print(Y_forecast)
 
 ```
 
