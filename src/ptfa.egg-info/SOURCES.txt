@@ -4,7 +4,6 @@ pyproject.toml
 src/ptfa/__init__.py
 src/ptfa/generation.py
 src/ptfa/ptfa.py
-src/ptfa/ptfa_testing.py
 src/ptfa.egg-info/PKG-INFO
 src/ptfa.egg-info/SOURCES.txt
 src/ptfa.egg-info/dependency_links.txt

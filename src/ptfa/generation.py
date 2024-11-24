@@ -73,6 +73,38 @@ def generate_data_system(T, p, q, k, sigma_x, sigma_y, seed_value=None):
     
     return X, Y, F, P, Q, Sigma_x, Sigma_y
 
+# Generating from targeted factor model with Toeplitz covariance matrices
+def generate_data_generalerrors(T, p, q, k, E_X, E_Y, seed_value=None):
+    """
+    Input: 
+        T          - Sample size
+        p          - Number of features
+        q          - Number of targets
+        k          - Number of factors (components)
+        E_X        - Matrix of errors for features (T x p)
+        E_Y        - Matrix of errors for targets (T x q)
+        seed_value - If None, random seed used every time. Otherwise, seed passed to RNG
+    Output:
+        X       - Features (T x p matrix)
+        Y       - Targets  (T x q matrix)
+        F       - Scores   (T x k matrix)
+        P       - Loadings of feature equation (p x k matrix)
+        Q       - Loadings of target equation (q x k matrix)
+    """
+    # Generate latent variables
+    rng = np.random.default_rng(seed=seed_value)
+    F = rng.normal(size = [T, k])
+    
+    # Generate loadings
+    P = rng.normal(size = [p, k])
+    Q = rng.normal(size = [q, k])
+    
+    # Generate predictor and response variables with added noise
+    X = F @ P.T + E_X
+    Y = F @ Q.T + E_Y
+    
+    return X, Y, F, P, Q
+
 # Generate data from the simplest model with missing-at-random entries
 def generate_data_missingatrandom(T, p, q, k, sigma_x, sigma_y,
                                   proportion_x=0.1, proportion_y=None, seed_value=None, return_nan=True):
