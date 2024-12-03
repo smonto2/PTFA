@@ -56,6 +56,19 @@ print(Y_forecast)
 
 Feel free to open issues or contribute to the repository through pull requests. We welcome suggestions and improvements.
 
+## BibTeX Citation
+If you use PTFA we would appreciate if you cite our work as: 
+```bibtex
+@article{HerculanoMontoya-Blandon2024,
+  title={Probabilistic Targeted Factor Analysis},
+  author={Herculano, Miguel C. and Montoya-Blandon, Santiago},
+  journal={Journal of Econometrics},
+  year={2024},
+  volume={xxx},
+  pages={xxx-xxx},
+  doi={10.xxxx/ptfa.2024}
+}
+
 ## Licence 
 
 This project is licensed under the MIT License.
