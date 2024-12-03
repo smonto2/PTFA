@@ -65,8 +65,8 @@ If you use PTFA we would appreciate if you cite our work as:
   journal={xxx},
   year={2024},
   volume={xxx},
-  pages={xxx-xxx},
-  doi={10.xxxx/ptfa.2024}
+  pages={xxx},
+  doi={xxx}
 }
 ```
 ## Licence 
