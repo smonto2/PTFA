@@ -82,14 +82,14 @@ class ProbabilisticTFA:
                 X[X_missing_index] = 0.0
         else:
             X_missing_index = X.mask
-            X = X.set_fill_value(value=0.0).filled()
+            X = X.filled(fill_value=0.0)
         if not np.ma.isMaskedArray(Y):
             Y_missing_index = np.isnan(Y)
             if np.any(Y_missing_index):
                 Y[Y_missing_index] = 0.0
         else:
             Y_missing_index = Y.mask
-            Y = Y.set_fill_value(value = 0.0).filled()
+            Y = Y.filled(fill_value=0.0)
 
         # Center and scale predictors and targets separately before stacking
         if standardize:
@@ -313,7 +313,7 @@ class ProbabilisticTFA_MixedFrequency:
                 Y[Y_missing_index] = 0.0
         else:
             Y_missing_index = Y.mask
-            Y = Y.set_fill_value(value = 0.0).filled()
+            Y = Y.filled(fill_value=0.0)
 
         # Center and scale predictors and targets separately
         if standardize:
@@ -542,14 +542,14 @@ class ProbabilisticTFA_StochasticVolatility:
                 X[X_missing_index] = 0.0
         else:
             X_missing_index = X.mask
-            X = X.set_fill_value(value=0.0).filled()
+            X = X.filled(fill_value=0.0)
         if not np.ma.isMaskedArray(Y):
             Y_missing_index = np.isnan(Y)
             if np.any(Y_missing_index):
                 Y[Y_missing_index] = 0.0
         else:
             Y_missing_index = Y.mask
-            Y = Y.set_fill_value(value = 0.0).filled()
+            Y = Y.filled(fill_value=0.0)
 
         # Center and scale predictors and targets separately before stacking
         if standardize:
@@ -791,14 +791,14 @@ class ProbabilisticTFA_DynamicFactors:
                 X[X_missing_index] = 0.0
         else:
             X_missing_index = X.mask
-            X = X.set_fill_value(value=0.0).filled()
+            X = X.filled(fill_value=0.0)
         if not np.ma.isMaskedArray(Y):
             Y_missing_index = np.isnan(Y)
             if np.any(Y_missing_index):
                 Y[Y_missing_index] = 0.0
         else:
             Y_missing_index = Y.mask
-            Y = Y.set_fill_value(value = 0.0).filled()
+            Y = Y.filled(fill_value=0.0)
 
         # Center and scale predictors and targets separately before stacking
         if standardize:
