@@ -6,7 +6,7 @@ class ProbabilisticTFA:
     """
     Probabilistic Targeted Factor Analysis (PTFA) class for fitting and predicting using a probabilistic model.
     Attributes:
-        n_components (int): Number of components (factors) to estimate.
+        n_components (int):              Number of components (factors) to estimate.
         P (np.ndarray):                  Estimated loadings for predictors.
         Q (np.ndarray):                  Estimated loadings for targets.
         sigma2_x (float):                Estimated variance for predictors.
@@ -31,7 +31,7 @@ class ProbabilisticTFA:
                 max_iter (int):          Maximum number of iterations for the EM algorithm.
                 r2_stop (bool):          Whether to stop based on R-squared convergence.
                 r2_iters (int):          Number of iterations to consider for R-squared convergence.
-        fitted(self, X, Y, standardize=True, compute_variance=False):
+        fitted(self, standardize=True, compute_variance=False):
             Computes the fitted values and optionally the prediction variance.
             Parameters:
                 compute_variance (bool): Whether to compute the prediction variance.
@@ -499,7 +499,7 @@ class ProbabilisticTFA_StochasticVolatility:
             Initializes the class with the specified number of components.
         fit(self, X, Y, standardize=True, ewma_lambda_x=0.94, ewma_lambda_y=None, V_prior=None, track_r2=True, tolerance=1e-6, max_iter=1000, r2_stop=True, r2_iters=100):
             Fits the model to the data using the EM algorithm.
-        fitted(self, X, Y, standardize=True):
+        fitted(self, standardize=True):
             Returns the predicted targets using the fitted model.
         predict(self, X, standardize=True):
             Predicts the targets using the predictors and the fitted model.
@@ -712,7 +712,7 @@ class ProbabilisticTFA_DynamicFactors:
             Computes the inverse elements of a banded matrix using its Cholesky decomposition.
         fit(self, X, Y, standardize=True, V_prior=None, track_r2=True, tolerance=1e-6, max_iter=1000, r2_stop=True, r2_iters=100):
             Fits the model to the given data using the EM algorithm.
-        fitted(self, X, Y, standardize=True, prediction_variance=False):
+        fitted(self, standardize=True, prediction_variance=False):
             Computes the fitted values for the given data.
         predict(self, X, standardize=True, prediction_variance=False, method="mean"):
             Predicts the target values for the given predictors.
