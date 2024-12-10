@@ -24,7 +24,7 @@ pip install ptfa
 The `ptfa` module includes several classes aimed at implementing PTFA in a variety of real-world data settings:
 - `ProbabilisticTFA`: main workhorse class providing factor extraction from features `X` to predict targets `Y` by extracting `n_components` number of common latent factors.
 - `ProbabilisticTFA_MixedFrequency`: adapts to situations where natural frequency of `X` is larger than `Y` (e.g., predicting quarterly variables using monthly information).
-- `ProbabilisticTFA_StochasticVolatility`: adapts main class to deal with stochastic volatility in features and targets.
+- `ProbabilisticTFA_StochasticVolatility`: adapts main class to deal with stochastic volatility (variance changing with time) in features and targets.
 - `ProbabilisticTFA_DynamicFactors`: when factors can exhibit time-series persistence, we fit a vector autoregressive of order 1 (VAR-1) process on the latent factors.
 
 All classes have the following methods in common:
@@ -52,7 +52,7 @@ Y = np.random.rand(100, 2)   # 100 observations, 2 targets
 # Initialize PTFA model with desired number of components
 model = ProbabilisticTFA(n_components=3)
 
-# Fit the model
+# Fit the model to data X and Y using EM algorithm
 model.fit(X, Y)
 
 # Calculate in-sample fitted values
