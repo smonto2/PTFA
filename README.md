@@ -80,11 +80,9 @@ If you use `ptfa` we would appreciate if you cite our work as:
 @article{HerculanoMontoya-Blandon2024,
   title={Probabilistic Targeted Factor Analysis},
   author={Herculano, Miguel C. and Montoya-Blandon, Santiago},
-  journal={xxx},
+  journal={arXiv preprint 2412.06688},
   year={2024},
-  volume={xxx},
-  pages={xxx},
-  doi={xxx}
+  url={https://arxiv.org/abs/2412.06688},
 }
 ```
 ## Licence 
