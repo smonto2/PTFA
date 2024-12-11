@@ -68,6 +68,9 @@ print(Y_fitted)
 print("Predicted targets:")
 print(Y_predicted)
 
+# Running fit method extracts common factors from features and targets
+print("Recovered factors:")
+print(model.factors)
 ```
 
 ## Contributing
