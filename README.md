@@ -1,8 +1,8 @@
 # Probabilistic Targeted Factor Analysis (PTFA)
 
-`ptfa` provides an implementation of Probabilistic Targeted Factor Analysis, a probabilistic extension of Partial Least Squares (PLS) designed to extract latent factors from features $(X)$ with pre-specified targets $(Y)$ in mind for optimal prediction. It leverages an Expectation-Maximization (EM) algorithm for robust parameter estimation, accommodating challenges such as missing data, stochastic volatility, and dynamic factors.
+**PTFA** is a probabilistic extension of Partial Least Squares (PLS), designed to extract latent factors from predictors $(X)$ and targets $(Y)$ for optimal prediction. It leverages an Expectation-Maximization (EM) algorithm for robust parameter estimation, accommodating challenges such as missing data, stochastic volatility, and dynamic factors.
 
-The framework balances flexibility and efficiency, providing an alternative to traditional methods like Principal Component Analysis (PCA) and standard PLS by incorporating probabilistic foundations.
+The framework balances flexibility and efficiency, providing an alternative to traditional methods like principal component analysis (PCA) and standard PLS by incorporating probabilistic foundations.
 
 ## Features
 
@@ -38,6 +38,8 @@ In addition, each class comes equipped with specific functions to handle the res
 Finally, all classes can handle missing-at-random data in the form of [`numpy.nan` entries](https://numpy.org/doc/stable/reference/constants.html#numpy.nan) in the data arrays `X` and `Y`. Alternatively, these arrays can be directly passed as [`numpy.MaskedArray` objects](https://numpy.org/doc/stable/reference/maskedarray.html#masked-arrays).
 
 ## Usage
+
+A large example showcasing the capabilities of PTFA is provided in the package repository: [Example Notebook](https://github.com/smonto2/PTFA/blob/main/example.ipynb).
 
 Here is a quick example of how to use the main class for factor extraction and forecasting, called `ProbabilisticTFA`:
 
@@ -75,19 +77,22 @@ print(model.factors)
 
 ## Contributing
 
-Feel free to open issues or contribute to the repository through pull requests. We welcome suggestions and improvements.
+Feel free to open issues or contribute to the repository through pull requests. We welcome suggestions and improvements to the package!
 
-## BibTeX Citation
-If you use `ptfa` we would appreciate if you cite our work as: 
-```bibtex
-@article{HerculanoMontoya-Blandon2024,
-  title={Probabilistic Targeted Factor Analysis},
-  author={Herculano, Miguel C. and Montoya-Blandon, Santiago},
-  journal={arXiv preprint 2412.06688},
-  year={2024},
-  url={https://arxiv.org/abs/2412.06688},
-}
-```
 ## Licence 
 
 This project is licensed under the MIT License.
+
+## BibTeX Citation
+If you use PTFA, we would appreciate if you cite our work as: 
+```bibtex
+@misc{herculano_2024_probabilistic,
+      title         = {Probabilistic Targeted Factor Analysis}, 
+      author        = {Miguel C. Herculano and Santiago Montoya-Blandón},
+      year          = {2024},
+      eprint        = {2412.06688},
+      archivePrefix = {arXiv},
+      primaryClass  = {econ.EM},
+      url           = {https://arxiv.org/abs/2412.06688}, 
+}
+```
