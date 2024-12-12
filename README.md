@@ -52,7 +52,7 @@ X = np.random.rand(100, 10)  # 100 observations, 10 predictors
 Y = np.random.rand(100, 2)   # 100 observations, 2 targets
 
 # Initialize PTFA model with desired number of components
-model = ProbabilisticTFA(n_components=3)
+model = ProbabilisticTFA(n_components=1)
 
 # Fit the model to data X and Y using EM algorithm
 model.fit(X, Y)
