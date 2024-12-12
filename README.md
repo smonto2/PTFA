@@ -79,10 +79,6 @@ print(model.factors)
 
 Feel free to open issues or contribute to the repository through pull requests. We welcome suggestions and improvements to the package!
 
-## Licence 
-
-This project is licensed under the MIT License.
-
 ## BibTeX Citation
 If you use PTFA, we would appreciate if you cite our work as: 
 ```bibtex
@@ -96,3 +92,7 @@ If you use PTFA, we would appreciate if you cite our work as:
       url           = {https://arxiv.org/abs/2412.06688}, 
 }
 ```
+
+## Licence 
+
+This project is licensed under the MIT License.
