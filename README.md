@@ -1,6 +1,6 @@
 # Probabilistic Targeted Factor Analysis (PTFA)
 
-**PTFA** is a probabilistic extension of Partial Least Squares (PLS), designed to extract latent factors from predictors $(X)$ and targets $(Y)$ for optimal prediction. It leverages an Expectation-Maximization (EM) algorithm for robust parameter estimation, accommodating challenges such as missing data, stochastic volatility, and dynamic factors.
+`ptfa` provides an implementation of Probabilistic Targeted Factor Analysis, a probabilistic extension of Partial Least Squares (PLS) designed to extract latent factors from features $(X)$ to optimally predict a set of pre-specified target variables $(Y)$. It leverages an Expectation-Maximization (EM) algorithm for robust parameter estimation, accommodating challenges such as missing data, stochastic volatility, and dynamic factors.
 
 The framework balances flexibility and efficiency, providing an alternative to traditional methods like principal component analysis (PCA) and standard PLS by incorporating probabilistic foundations.
 
@@ -33,7 +33,7 @@ All classes have the following methods in common:
 - `fitted(self, ...)`: computes the in-sample fitted values for the targets.
 - `predict(self, X)`: out-of-sample predicted values of targets using new features `X`.
 
-In addition, each class comes equipped with specific functions to handle the respective data-generating processes. More details on the routines and the additional arguments `...` each command can take can be found in the documentation for each class in the [GitHub repository](https://github.com/smonto2/PTFA/tree/main/src/ptfa/)).
+In addition, each class comes equipped with specific functions to handle the respective data-generating processes. More details on the routines and the additional arguments `...` each command can take can be found in the documentation for each class in the [GitHub repository](https://github.com/smonto2/PTFA/tree/main/tree/main/src/ptfa/)).
 
 Finally, all classes can handle missing-at-random data in the form of [`numpy.nan` entries](https://numpy.org/doc/stable/reference/constants.html#numpy.nan) in the data arrays `X` and `Y`. Alternatively, these arrays can be directly passed as [`numpy.MaskedArray` objects](https://numpy.org/doc/stable/reference/maskedarray.html#masked-arrays).
 
@@ -70,7 +70,8 @@ print(Y_fitted)
 print("Predicted targets:")
 print(Y_predicted)
 
-# Running fit method extracts common factors from features and targets
+# Running .fit() method saves to model object the
+# extracted common factors from features and targets
 print("Recovered factors:")
 print(model.factors)
 ```
@@ -82,9 +83,9 @@ Feel free to open issues or contribute to the repository through pull requests. 
 ## BibTeX Citation
 If you use PTFA, we would appreciate if you cite our work as: 
 ```bibtex
-@article{herculano_2024_probabilistic,
+@misc{herculano_2024_probabilistic,
       title         = {Probabilistic Targeted Factor Analysis}, 
-      author        = {Miguel C. Herculano and Santiago Montoya-Blandón},
+      author        = {Herculano, Miguel C. and Montoya-Blandón, Santiago},
       year          = {2024},
       eprint        = {2412.06688},
       archivePrefix = {arXiv},
