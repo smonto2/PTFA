@@ -82,7 +82,7 @@ Feel free to open issues or contribute to the repository through pull requests. 
 ## BibTeX Citation
 If you use PTFA, we would appreciate if you cite our work as: 
 ```bibtex
-@misc{herculano_2024_probabilistic,
+@article{herculano_2024_probabilistic,
       title         = {Probabilistic Targeted Factor Analysis}, 
       author        = {Miguel C. Herculano and Santiago Montoya-Blandón},
       year          = {2024},
