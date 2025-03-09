@@ -73,7 +73,7 @@ def generate_data_system(T, p, q, k, sigma_x, sigma_y, seed_value=None):
     
     return X, Y, F, P, Q, Sigma_x, Sigma_y
 
-# Generating from targeted factor model with Toeplitz covariance matrices
+# Generating from targeted factor model with predetermined general errors
 def generate_data_generalerrors(T, p, q, k, E_X, E_Y, seed_value=None):
     """
     Input: 
