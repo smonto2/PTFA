@@ -33,7 +33,7 @@ All classes have the following methods in common:
 - `fitted(self, ...)`: computes the in-sample fitted values for the targets.
 - `predict(self, X)`: out-of-sample predicted values of targets using new features `X`.
 
-In addition, each class comes equipped with specific functions to handle the respective data-generating processes. More details on the routines and the additional arguments `...` each command can take can be found in the documentation for each class in the [GitHub repository](https://github.com/smonto2/PTFA/tree/main/tree/main/src/ptfa/)).
+In addition, each class comes equipped with specific functions to handle the respective data-generating processes. More details on the routines and the additional arguments `...` each command can take can be found in the documentation for each class in the [GitHub repository](https://github.com/smonto2/PTFA/tree/main/src/ptfa)).
 
 Finally, all classes can handle missing-at-random data in the form of [`numpy.nan` entries](https://numpy.org/doc/stable/reference/constants.html#numpy.nan) in the data arrays `X` and `Y`. Alternatively, these arrays can be directly passed as [`numpy.MaskedArray` objects](https://numpy.org/doc/stable/reference/maskedarray.html#masked-arrays).
 
