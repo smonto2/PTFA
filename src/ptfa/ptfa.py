@@ -2,6 +2,7 @@ import numpy as np
 from scipy import linalg, sparse
 from sklearn.metrics import r2_score
 
+# Class of methods introduced in the paper
 class ProbabilisticTFA:
     """
     Probabilistic Targeted Factor Analysis (PTFA) class for fitting and predicting using a probabilistic model.
@@ -16,21 +17,24 @@ class ProbabilisticTFA:
         max_iter (int):                  Maximum number of iterations for the EM algorithm.
         tolerance (float):               Convergence tolerance for the EM algorithm.
         r2_array (np.ndarray):           Array of R-squared values across iterations if tracking is enabled.
+        seed_value (int or None):        Random seed for reproducibility (if None, random seed chosen by np.random).
     Methods:
         __init__(self, n_components):
             Initializes the PTFA model with the specified number of components.
-        fit(self, X, Y, standardize=True, V_prior=None, track_r2=True, tolerance=1e-6, max_iter=1000, r2_stop=True, r2_iters=100):
+        fit(self, X, Y, standardize=True, V_prior=None, track_r2=True, tolerance=1e-6, max_iter=1000,
+            r2_stop=True, r2_iters=100, seed_value=None):
             Fits the PTFA model to the given data using the EM algorithm.
             Parameters:
-                X (np.ndarray):          Predictor data matrix of shape (T, p).
-                Y (np.ndarray):          Target data matrix of shape (T, q).
-                standardize (bool):      Whether to standardize the data before fitting.
-                V_prior (np.ndarray):    Prior covariance matrix for factors.
-                track_r2 (bool):         track R-squared values across iterations.
-                tolerance (float):       Convergence tolerance for the EM algorithm.
-                max_iter (int):          Maximum number of iterations for the EM algorithm.
-                r2_stop (bool):          Whether to stop based on R-squared convergence.
-                r2_iters (int):          Number of iterations to consider for R-squared convergence.
+                X (np.ndarray):            Predictor data matrix of shape (T, p).
+                Y (np.ndarray):            Target data matrix of shape (T, q).
+                standardize (bool):        Whether to standardize the data before fitting.
+                V_prior (np.ndarray):      Prior covariance matrix for factors.
+                track_r2 (bool):           track R-squared values across iterations.
+                tolerance (float):         Convergence tolerance for the EM algorithm.
+                max_iter (int):            Maximum number of iterations for the EM algorithm.
+                r2_stop (bool):            Whether to stop based on R-squared convergence.
+                r2_iters (int):            Number of iterations to consider for R-squared convergence.
+                seed_value (int or None):  Random seed for reproducibility (if None, random seed chosen by np.random).
         fitted(self, standardize=True, compute_variance=False):
             Computes the fitted values and optionally the prediction variance.
             Parameters:
@@ -54,16 +58,15 @@ class ProbabilisticTFA:
                 
         # Pre-allocate memory for estimates
         self.P = None
-        self.Q = None
-        self.sigma2_x = None
-        self.sigma2_y = None
+        self.sigma2 = None
         self.factors = None
 
     def fit(self, X, Y, standardize = True, V_prior = None, track_r2 = True,
-            tolerance = 1e-6, max_iter = 1000, r2_stop = True, r2_iters = 25):
+            tolerance = 1e-6, max_iter = 1000, r2_stop = True, r2_iters = 25, seed_value = None):
         # Fill in components of the class controlling algorithm
         self.max_iter = max_iter
         self.tolerance = tolerance
+        self.seed_value = seed_value
         k = self.n_components
         if V_prior is None:
             self.V_prior = np.eye(k)
@@ -98,7 +101,7 @@ class ProbabilisticTFA:
         Z = np.hstack([X, Y])
         
         # Initial values for the parameters
-        L0 = np.random.default_rng().normal(size = [d, k])
+        L0 = np.random.default_rng(self.seed_value).normal(size = [d, k])
         sigma2_x0 = X.var(axis = 0).mean()    # Mean variance across features
         sigma2_y0 = Y.var(axis = 0).mean()    # Mean variance across targets
 
@@ -136,7 +139,7 @@ class ProbabilisticTFA:
             Q_distance = np.linalg.norm(Q - L0[p:], "fro")
             sigma_x_distance = np.abs(sigma2_x1 - sigma2_x0)
             sigma_y_distance = np.abs(sigma2_y1 - sigma2_y0)
-            theta_distance = sum([P_distance, Q_distance, sigma_x_distance, sigma_y_distance])
+            theta_distance = max([P_distance, Q_distance, sigma_x_distance, sigma_y_distance])
             
             # Prediction and tracking of R-squared across iterations
             if track_r2 or r2_stop:
@@ -241,11 +244,13 @@ class ProbabilisticTFA_MixedFrequency:
         Tolerance for convergence of the EM algorithm.
     r2_array : np.ndarray
         Array of R-squared values across iterations.
+    seed_value : int or None
+        Seed value for random number generation (if None, it is chosen by np.random).
     Methods
     -------
     highfrequency_to_lowfrequency_reshape(X, low_frequency_T, periods):
         Reshape high-frequency data to low-frequency data.
-    fit(X, Y, periods, standardize=True, V_prior=None, track_r2=True, tolerance=1e-6, max_iter=1000, r2_stop=True, r2_iters=100):
+    fit(X, Y, periods, standardize=True, V_prior=None, track_r2=True, tolerance=1e-6, max_iter=1000, r2_stop=True, r2_iters=100, seed_value=None):
         Fit the model using the EM algorithm.
     fitted(compute_variance=False):
         Obtain fitted values for the low-frequency targets.
@@ -284,11 +289,12 @@ class ProbabilisticTFA_MixedFrequency:
         return reshaped_X
 
     def fit(self, X, Y, periods, standardize = True, V_prior = None, track_r2 = True,
-            tolerance = 1e-6, max_iter = 1000, r2_stop = True, r2_iters = 25):
+            tolerance = 1e-6, max_iter = 1000, r2_stop = True, r2_iters = 25, seed_value = None):
         # Fill in components of the class
         self.max_iter = max_iter
         self.tolerance = tolerance
         self.periods = periods
+        self.seed_value = seed_value
         k = self.n_components
         if V_prior is None:
             self.V_prior = np.eye(k)
@@ -327,8 +333,9 @@ class ProbabilisticTFA_MixedFrequency:
         reshaped_X[X_missing_index] = 0.0            
         
         # Initial values for the parameters
-        P0 = np.random.default_rng().normal(size = [p, k])
-        Q0 = np.random.default_rng().normal(size = [q, k])
+        rng = np.random.default_rng(seed=self.seed_value)
+        P0 = rng.normal(size = [p, k])
+        Q0 = rng.normal(size = [q, k])
         sigma2_x0 = np.var(X, axis = 0).mean()    # Mean variance across features
         sigma2_y0 = np.var(Y, axis = 0).mean()    # Mean variance across targets
 
@@ -381,7 +388,7 @@ class ProbabilisticTFA_MixedFrequency:
             Q_distance = np.linalg.norm(Q1 - Q0, "fro")
             sigma_x_distance = np.abs(sigma2_x1 - sigma2_x0)
             sigma_y_distance = np.abs(sigma2_y1 - sigma2_y0)
-            theta_distance = sum([P_distance, Q_distance, sigma_x_distance, sigma_y_distance])
+            theta_distance = max([P_distance, Q_distance, sigma_x_distance, sigma_y_distance])
             
             # Prediction and tracking of R-squared across iterations
             if track_r2 or r2_stop:
@@ -482,22 +489,23 @@ class ProbabilisticTFA_StochasticVolatility:
     """
     A class to perform Probabilistic Targeted Factor Analysis (PTFA) with Stochastic Volatility.
     Attributes:
-        n_components (int):    Number of components (factors).
-        P (np.ndarray):        Factor loadings for predictors.
-        Q (np.ndarray):        Factor loadings for targets.
-        sigma2_x (np.ndarray): Time-varying volatilities for predictors equations.
-        sigma2_y (np.ndarray): Time-varying volatilities for targets equations.
-        factors (np.ndarray):  Predicted factors.
-        max_iter (int):        Maximum number of iterations for the EM algorithm.
-        tolerance (float):     Convergence tolerance for the EM algorithm.
-        ewma_lambda_x (float): EWMA smoothing parameter for predictors.
-        ewma_lambda_y (float): EWMA smoothing parameter for targets.
-        V_prior (np.ndarray):  Prior covariance matrix for factors.
-        r2_array (np.ndarray): Array of R-squared values across iterations.
+        n_components (int):       Number of components (factors).
+        P (np.ndarray):           Factor loadings for predictors.
+        Q (np.ndarray):           Factor loadings for targets.
+        sigma2_x (np.ndarray):    Time-varying volatilities for predictors equations.
+        sigma2_y (np.ndarray):    Time-varying volatilities for targets equations.
+        factors (np.ndarray):     Predicted factors.
+        max_iter (int):           Maximum number of iterations for the EM algorithm.
+        tolerance (float):        Convergence tolerance for the EM algorithm.
+        ewma_lambda_x (float):    EWMA smoothing parameter for predictors.
+        ewma_lambda_y (float):    EWMA smoothing parameter for targets.
+        V_prior (np.ndarray):     Prior covariance matrix for factors.
+        r2_array (np.ndarray):    Array of R-squared values across iterations.
+        seed_value (int or None): Seed value for random number generation (if None, it is chosen by np.random).
     Methods:
         __init__(self, n_components):
             Initializes the class with the specified number of components.
-        fit(self, X, Y, standardize=True, ewma_lambda_x=0.94, ewma_lambda_y=None, V_prior=None, track_r2=True, tolerance=1e-6, max_iter=1000, r2_stop=True, r2_iters=100):
+        fit(self, X, Y, standardize=True, ewma_lambda_x=0.94, ewma_lambda_y=None, V_prior=None, track_r2=True, tolerance=1e-6, max_iter=1000, r2_stop=True, r2_iters=100, seed_value=None):
             Fits the model to the data using the EM algorithm.
         fitted(self, standardize=True):
             Returns the predicted targets using the fitted model.
@@ -516,10 +524,11 @@ class ProbabilisticTFA_StochasticVolatility:
         self.factors = None
 
     def fit(self, X, Y, standardize = True, ewma_lambda_x = 0.94, ewma_lambda_y = None, V_prior = None,
-            track_r2 = True, tolerance = 1e-6, max_iter = 1000, r2_stop = True, r2_iters = 25):
+            track_r2 = True, tolerance = 1e-6, max_iter = 1000, r2_stop = True, r2_iters = 25, seed_value = None):
         # Fill in components of the class
         self.max_iter = max_iter
         self.tolerance = tolerance          # EM stopping tolerance
+        self.seed_value = seed_value
         k = self.n_components
         if V_prior is None:
             self.V_prior = np.eye(k)
@@ -558,7 +567,7 @@ class ProbabilisticTFA_StochasticVolatility:
         Z = np.hstack([X, Y])
 
         # Initial values for the parameters (time-varying volatilities start constant)
-        L0 = np.random.default_rng().normal(size = [d, k])
+        L0 = np.random.default_rng(self.seed_value).normal(size = [d, k])
         sigma2_x_initial = np.var(X, axis = 0).mean()    # Mean variance across features
         sigma2_y_initial = np.var(Y, axis = 0).mean()    # Mean variance across targets
         sigma2_x = np.full(T, sigma2_x_initial)
@@ -608,7 +617,7 @@ class ProbabilisticTFA_StochasticVolatility:
             # Compute distance between iterates
             P_distance = np.linalg.norm(P - L0[:p], "fro")
             Q_distance = np.linalg.norm(Q - L0[p:], "fro")
-            theta_distance = sum([P_distance, Q_distance])
+            theta_distance = max([P_distance, Q_distance])
             
             # Prediction and tracking of R-squared across iterations
             if track_r2 or r2_stop:
@@ -705,12 +714,13 @@ class ProbabilisticTFA_DynamicFactors:
         max_iter (int):           Maximum number of iterations for the EM algorithm.
         tolerance (float):        Convergence tolerance for the EM algorithm.
         r2_array (np.ndarray):    Array of R-squared values across iterations.
+        seed_value (int or None): Seed value for random number generation (if None, it is chosen by np.random).
     Methods:
         __init__(self, n_components):
             Initializes the ProbabilisticTFA_DynamicFactors class with the specified number of components.
         bands_cholesky(self, cholesky_banded, desired_bands=0):
             Computes the inverse elements of a banded matrix using its Cholesky decomposition.
-        fit(self, X, Y, standardize=True, V_prior=None, track_r2=True, tolerance=1e-6, max_iter=1000, r2_stop=True, r2_iters=100):
+        fit(self, X, Y, standardize=True, V_prior=None, track_r2=True, tolerance=1e-6, max_iter=1000, r2_stop=True, r2_iters=100, seed_value=None):
             Fits the model to the given data using the EM algorithm.
         fitted(self, standardize=True, prediction_variance=False):
             Computes the fitted values for the given data.
@@ -769,10 +779,11 @@ class ProbabilisticTFA_DynamicFactors:
         return Omega[desired_bands:, :]
 
     def fit(self, X, Y, standardize = True, V_prior = None, track_r2 = True,
-            tolerance = 1e-6, max_iter = 1000, r2_stop = True, r2_iters = 25):
+            tolerance = 1e-6, max_iter = 1000, r2_stop = True, r2_iters = 25, seed_value = None):
         # Fill in components of the class
         self.max_iter = max_iter
         self.tolerance = tolerance
+        self.seed_value = seed_value
         k = self.n_components
         if V_prior is None:
             self.V_prior = np.eye(k)
@@ -807,7 +818,7 @@ class ProbabilisticTFA_DynamicFactors:
         Z = np.hstack([X, Y])
 
         # Initial values for the parameters
-        L0 = np.random.default_rng().normal(size = [d, k])
+        L0 = np.random.default_rng(self.seed_value).normal(size = [d, k])
         sigma2_x0 = np.var(X, axis = 0).mean()    # Mean variance across features
         sigma2_y0 = np.var(Y, axis = 0).mean()    # Mean variance across targets
         A0 = np.eye(k)
@@ -895,7 +906,7 @@ class ProbabilisticTFA_DynamicFactors:
             sigma_y_distance = np.abs(sigma2_y1 - sigma2_y0)
             A_distance = np.linalg.norm(A1 - A0, "fro")
             f0_distance = np.linalg.norm(f0_0 - f0_1, 2)
-            theta_distance = sum([P_distance, Q_distance, sigma_x_distance, sigma_y_distance, A_distance, f0_distance])
+            theta_distance = max([P_distance, Q_distance, sigma_x_distance, sigma_y_distance, A_distance, f0_distance])
             
             # Prediction and tracking of R-squared across iterations
             if track_r2:
@@ -1000,3 +1011,193 @@ class ProbabilisticTFA_DynamicFactors:
             q = self.Q.shape[0]
             Y_hat_variance = self.sigma2_y * np.eye(q) + self.Q @ np.linalg.solve(Omega_0_inv_X, self.Q.T)
             return Y_hat, Y_hat_variance
+        
+
+# Compering methods for comparison
+class ProbabilisticPCA:
+    """
+    Probabilistic Principal Component Analysis (PPCA) class for fitting and predicting using a probabilistic model.
+    Implementation follows original paper Tipping and Bishop (1999, JRSS-B)
+    Attributes:
+        n_components (int):              Number of components (factors) to estimate.
+        L (np.ndarray):                  Estimated loadings.
+        sigma2 (float):                  Estimated variance.
+        factors (np.ndarray):            Predicted factors.
+        V_prior (np.ndarray):            Prior covariance matrix for factors.
+        max_iter (int):                  Maximum number of iterations for the EM algorithm.
+        tolerance (float):               Convergence tolerance for the EM algorithm.
+        r2_array (np.ndarray):           Array of R-squared values across iterations if tracking is enabled.
+        seed_value (int or None):        Seed value for random number generation (if None, it is chosen by np.random).
+    Methods:
+        __init__(self, n_components):
+            Initializes the PPCA model with the specified number of components.
+        fit(self, X, Y, standardize=True, V_prior=None, track_r2=True, tolerance=1e-6, max_iter=1000, r2_stop=True, r2_iters=100):
+            Fits the PPCA model to the given data using the EM algorithm.
+            Parameters:
+                X (np.ndarray):           Predictor data matrix of shape (T, d).
+                standardize (bool):       Whether to standardize the data before fitting.
+                V_prior (np.ndarray):     Prior covariance matrix for factors.
+                track_r2 (bool):          track R-squared values across iterations.
+                tolerance (float):        Convergence tolerance for the EM algorithm.
+                max_iter (int):           Maximum number of iterations for the EM algorithm.
+                r2_stop (bool):           Whether to stop based on R-squared convergence.
+                r2_iters (int):           Number of iterations to consider for R-squared convergence.
+                seed_value (int or None): Seed value for random number generation (if None, it is chosen by np.random).
+        fitted(self, standardize=True, compute_variance=False):
+            Computes the fitted values and optionally the prediction variance.
+            Parameters:
+                compute_variance (bool): Whether to compute the prediction variance.
+            Returns:
+                np.ndarray:              Predicted target values.
+                np.ndarray (optional):   Prediction variance matrix if compute_variance is True.
+        predict(self, X, standardize=True, compute_variance=False):
+            Predicts target values using the fitted PPCA model.
+            Parameters:
+                X (np.ndarray):          Predictor data matrix of shape (T, d).
+                standardize (bool):      Whether to standardize the data before predicting.
+                compute_variance (bool): Whether to compute the prediction variance.
+            Returns:
+                np.ndarray: Predicted target values.
+                np.ndarray (optional):  Prediction variance matrix if compute_variance is True.
+    """
+    def __init__(self, n_components):
+        # Fill in components of the class
+        self.n_components = n_components
+                
+        # Pre-allocate memory for estimates
+        self.L = None
+        self.sigma2 = None
+        self.factors = None
+
+    def fit(self, X, standardize = True, V_prior = None, track_r2 = True,
+            tolerance = 1e-6, max_iter = 1000, r2_stop = False, r2_iters = 25, seed_value = None):
+        # Fill in components of the class controlling algorithm
+        self.max_iter = max_iter
+        self.tolerance = tolerance
+        self.seed_value = seed_value
+        k = self.n_components
+        if V_prior is None:
+            self.V_prior = np.eye(k)
+        self.V_prior_inv = np.eye(k) if V_prior is None else np.linalg.inv(V_prior)
+        
+        # Obtain sizes and missing indices
+        # X is T x d; Factors assumed as T x k
+        T, d = X.shape
+        
+        # Obtain indices of missing observations to create masked objects and initial imputation step
+        if not np.ma.isMaskedArray(X):
+            X_missing_index = np.isnan(X)
+            if np.any(X_missing_index):
+                X[X_missing_index] = 0.0
+        else:
+            X_missing_index = X.mask
+            X = X.filled(fill_value=0.0)
+
+        # Center and scale predictors and targets separately before stacking
+        if standardize:
+            X = (X - np.mean(X, axis = 0, where = np.logical_not(X_missing_index))) / np.std(X, axis = 0, where = np.logical_not(X_missing_index))
+            
+        # Initial values for the parameters
+        L0 = np.random.default_rng(self.seed_value).normal(size = [d, k])
+        sigma2_0 = X.var(axis = 0).mean()    # Mean variance across features
+        
+        # Track R-squared of fit if necessary
+        if track_r2 or r2_stop:
+            r2_list = []
+        
+        # Start EM algorithm main loop
+        for i in range(self.max_iter):
+            # Expectation step: Update posterior paramater for factors
+            L_scaled = L0 / sigma2_0
+            Omega = np.linalg.inv(self.V_prior_inv + L0.T @ L_scaled)
+            M = X @ L_scaled @ Omega
+
+            # If any missing data, update imputation step using current EM fit
+            if np.any(X_missing_index):
+                X_hat = M @ L0[:d].T
+                X[X_missing_index] = X_hat[X_missing_index]
+
+            # Maximization step: Update factor loadings and variances
+            V = T * Omega + M.T @ M
+            L1 = np.linalg.solve(V, M.T @ X).T
+            sigma2_1 = (1/(T * d)) * (np.sum(X**2) - np.trace(L1.T @ L1 @ V))
+            
+            # Compute distance between iterates
+            L_distance = np.linalg.norm(L1 - L0, "fro")
+            sigma_x_distance = np.abs(sigma2_1 - sigma2_0)
+            theta_distance = max([L_distance, sigma_x_distance])
+
+            # Prediction and tracking of R-squared across iterations
+            if track_r2 or r2_stop:
+                # Save current value of R-squared
+                X_hat = M @ L1.T
+                r2_values = r2_score(X, X_hat, multioutput = "raw_values")
+                r2_list.append(r2_values)
+
+            # Check convergence condition
+            convergence = (theta_distance <= self.tolerance)
+            if r2_stop and i >= r2_iters:
+                # Add stopping condition based on history of R-squared across iterations
+                r2_convergence = np.allclose(np.mean(r2_list[-r2_iters:]),    # Average of previous r_iters values
+                                             np.mean(r2_list[-1]),            # Current value
+                                             self.tolerance)
+                convergence = convergence or r2_convergence
+            if convergence:
+                # Break if either distance between each estimate or R-squared decrease is small
+                break
+            else:
+                # Prepare values for next iteration if convergence not reached
+                L0 = L1
+                sigma2_0 = sigma2_1
+                
+        # Update values of the class with results from EM algorithm
+        self.L = L1
+        self.sigma2 = sigma2_1
+        self.r2_array = np.asarray(r2_list) if track_r2 else None
+        self.factors = M
+        
+    def fitted(self, compute_variance = False):
+        # PPCA prediction in-sample:
+        X_hat = self.factors @ self.L.T
+        
+        # Return value depends on whether fitted variance is also required
+        if not compute_variance:
+            return X_hat
+        else:
+            d = self.L.shape[0]
+            Omega_inverse = self.V_prior_inv + self.L.T @ (self.L / self.sigma2)
+            X_hat_variance = self.sigma2 * np.eye(d) + self.L @ np.linalg.solve(Omega_inverse, self.L.T)
+            return X_hat, X_hat_variance
+
+    def predict(self, X, standardize = True, compute_variance = False):
+        # Obtain indices of missing observations and impute using EM fit
+        if not np.ma.isMaskedArray(X):
+            X_missing_index = np.isnan(X)
+            if np.any(X_missing_index):
+                X_hat = self.factors @ self.L.T
+                X[X_missing_index] = X_hat[X_missing_index]
+        else:
+            X_missing_index = X.mask
+            if np.any(X_missing_index):
+                X_hat = self.factors @ self.L.T
+                X = X.filled(X_hat)            
+        
+        # Center and scale predictors if required
+        if standardize:
+            X = (X - np.mean(X, axis = 0, where = np.logical_not(X_missing_index))) / np.std(X, axis = 0, where = np.logical_not(X_missing_index))
+                
+        # Obtains predicted factors using X only: F_predicted = M (Posterior mean of factors)
+        L_scaled = self.L / self.sigma2
+        Omega_X_inverse = self.V_prior_inv + self.L.T @ L_scaled
+        F_predicted = np.linalg.solve(Omega_X_inverse, L_scaled.T @ X.T).T
+
+        # PTFA out-of-sample prediction:
+        X_hat = F_predicted @ self.Q.T
+
+        # Return value depends on whether fitted variance is also required
+        if not compute_variance:
+            return X_hat
+        else:
+            d = self.L.shape[0]
+            X_hat_variance = self.sigma2 * np.eye(d) + self.L @ np.linalg.solve(Omega_X_inverse, self.L.T)
+            return X_hat, X_hat_variance

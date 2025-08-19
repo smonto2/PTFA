@@ -26,6 +26,7 @@ The `ptfa` module includes several classes aimed at implementing PTFA in a varie
 - `ProbabilisticTFA_MixedFrequency`: adapts to situations where natural measurement frequency of `X` is larger than `Y` (e.g., using monthly information to predict quarterly variables).
 - `ProbabilisticTFA_StochasticVolatility`: adapts main class to deal with stochastic volatility (variance changing with time) in features and targets.
 - `ProbabilisticTFA_DynamicFactors`: when factors can exhibit time-series persistence, we fit a vector autoregressive of order 1 (VAR-1) process on the latent factors.
+- `ProbabilisticPCA`: an implementation of original Probabilistic PCA [(Tipping and Bishop, 1999, JRSS-B)](https://doi.org/10.1111/1467-9868.00196) to compare with PTFA.
 
 All classes have the following methods in common:
 - `__init__(self, n_components)`: creates the class instance with specified number of latent components.
