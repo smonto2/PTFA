@@ -17,12 +17,11 @@ class ProbabilisticTFA:
         max_iter (int):                  Maximum number of iterations for the EM algorithm.
         tolerance (float):               Convergence tolerance for the EM algorithm.
         r2_array (np.ndarray):           Array of R-squared values across iterations if tracking is enabled.
-        seed_value (int or None):        Random seed for reproducibility (if None, random seed chosen by np.random).
     Methods:
         __init__(self, n_components):
             Initializes the PTFA model with the specified number of components.
         fit(self, X, Y, standardize=True, V_prior=None, track_r2=True, tolerance=1e-6, max_iter=1000,
-            r2_stop=True, r2_iters=100, seed_value=None):
+            r2_stop=True, r2_iters=100, rng=None):
             Fits the PTFA model to the given data using the EM algorithm.
             Parameters:
                 X (np.ndarray):            Predictor data matrix of shape (T, p).
@@ -34,7 +33,7 @@ class ProbabilisticTFA:
                 max_iter (int):            Maximum number of iterations for the EM algorithm.
                 r2_stop (bool):            Whether to stop based on R-squared convergence.
                 r2_iters (int):            Number of iterations to consider for R-squared convergence.
-                seed_value (int or None):  Random seed for reproducibility (if None, random seed chosen by np.random).
+                rng (np.random.Generator): Random number generator for reproducibility.
         fitted(self, standardize=True, compute_variance=False):
             Computes the fitted values and optionally the prediction variance.
             Parameters:
@@ -62,11 +61,10 @@ class ProbabilisticTFA:
         self.factors = None
 
     def fit(self, X, Y, standardize = True, V_prior = None, track_r2 = True,
-            tolerance = 1e-6, max_iter = 1000, r2_stop = True, r2_iters = 25, seed_value = None):
+            tolerance = 1e-6, max_iter = 1000, r2_stop = True, r2_iters = 25, rng = None):
         # Fill in components of the class controlling algorithm
         self.max_iter = max_iter
         self.tolerance = tolerance
-        self.seed_value = seed_value
         k = self.n_components
         if V_prior is None:
             self.V_prior = np.eye(k)
@@ -101,7 +99,9 @@ class ProbabilisticTFA:
         Z = np.hstack([X, Y])
         
         # Initial values for the parameters
-        L0 = np.random.default_rng(self.seed_value).normal(size = [d, k])
+        if rng is None:
+            rng = np.random.default_rng()
+        L0 = rng.normal(size = [d, k])
         sigma2_x0 = X.var(axis = 0).mean()    # Mean variance across features
         sigma2_y0 = Y.var(axis = 0).mean()    # Mean variance across targets
 
@@ -244,13 +244,11 @@ class ProbabilisticTFA_MixedFrequency:
         Tolerance for convergence of the EM algorithm.
     r2_array : np.ndarray
         Array of R-squared values across iterations.
-    seed_value : int or None
-        Seed value for random number generation (if None, it is chosen by np.random).
     Methods
     -------
     highfrequency_to_lowfrequency_reshape(X, low_frequency_T, periods):
         Reshape high-frequency data to low-frequency data.
-    fit(X, Y, periods, standardize=True, V_prior=None, track_r2=True, tolerance=1e-6, max_iter=1000, r2_stop=True, r2_iters=100, seed_value=None):
+    fit(X, Y, periods, standardize=True, V_prior=None, track_r2=True, tolerance=1e-6, max_iter=1000, r2_stop=True, r2_iters=100, rng=None):
         Fit the model using the EM algorithm.
     fitted(compute_variance=False):
         Obtain fitted values for the low-frequency targets.
@@ -289,12 +287,11 @@ class ProbabilisticTFA_MixedFrequency:
         return reshaped_X
 
     def fit(self, X, Y, periods, standardize = True, V_prior = None, track_r2 = True,
-            tolerance = 1e-6, max_iter = 1000, r2_stop = True, r2_iters = 25, seed_value = None):
+            tolerance = 1e-6, max_iter = 1000, r2_stop = True, r2_iters = 25, rng = None):
         # Fill in components of the class
         self.max_iter = max_iter
         self.tolerance = tolerance
         self.periods = periods
-        self.seed_value = seed_value
         k = self.n_components
         if V_prior is None:
             self.V_prior = np.eye(k)
@@ -333,7 +330,8 @@ class ProbabilisticTFA_MixedFrequency:
         reshaped_X[X_missing_index] = 0.0            
         
         # Initial values for the parameters
-        rng = np.random.default_rng(seed=self.seed_value)
+        if rng is None:
+            rng = np.random.default_rng()
         P0 = rng.normal(size = [p, k])
         Q0 = rng.normal(size = [q, k])
         sigma2_x0 = np.var(X, axis = 0).mean()    # Mean variance across features
@@ -501,11 +499,10 @@ class ProbabilisticTFA_StochasticVolatility:
         ewma_lambda_y (float):    EWMA smoothing parameter for targets.
         V_prior (np.ndarray):     Prior covariance matrix for factors.
         r2_array (np.ndarray):    Array of R-squared values across iterations.
-        seed_value (int or None): Seed value for random number generation (if None, it is chosen by np.random).
     Methods:
         __init__(self, n_components):
             Initializes the class with the specified number of components.
-        fit(self, X, Y, standardize=True, ewma_lambda_x=0.94, ewma_lambda_y=None, V_prior=None, track_r2=True, tolerance=1e-6, max_iter=1000, r2_stop=True, r2_iters=100, seed_value=None):
+        fit(self, X, Y, standardize=True, ewma_lambda_x=0.94, ewma_lambda_y=None, V_prior=None, track_r2=True, tolerance=1e-6, max_iter=1000, r2_stop=True, r2_iters=100, rng=None):
             Fits the model to the data using the EM algorithm.
         fitted(self, standardize=True):
             Returns the predicted targets using the fitted model.
@@ -524,11 +521,10 @@ class ProbabilisticTFA_StochasticVolatility:
         self.factors = None
 
     def fit(self, X, Y, standardize = True, ewma_lambda_x = 0.94, ewma_lambda_y = None, V_prior = None,
-            track_r2 = True, tolerance = 1e-6, max_iter = 1000, r2_stop = True, r2_iters = 25, seed_value = None):
+            track_r2 = True, tolerance = 1e-6, max_iter = 1000, r2_stop = True, r2_iters = 25, rng = None):
         # Fill in components of the class
         self.max_iter = max_iter
         self.tolerance = tolerance          # EM stopping tolerance
-        self.seed_value = seed_value
         k = self.n_components
         if V_prior is None:
             self.V_prior = np.eye(k)
@@ -567,7 +563,9 @@ class ProbabilisticTFA_StochasticVolatility:
         Z = np.hstack([X, Y])
 
         # Initial values for the parameters (time-varying volatilities start constant)
-        L0 = np.random.default_rng(self.seed_value).normal(size = [d, k])
+        if rng is None:
+            rng = np.random.default_rng()
+        L0 = rng.normal(size = [d, k])
         sigma2_x_initial = np.var(X, axis = 0).mean()    # Mean variance across features
         sigma2_y_initial = np.var(Y, axis = 0).mean()    # Mean variance across targets
         sigma2_x = np.full(T, sigma2_x_initial)
@@ -714,13 +712,12 @@ class ProbabilisticTFA_DynamicFactors:
         max_iter (int):           Maximum number of iterations for the EM algorithm.
         tolerance (float):        Convergence tolerance for the EM algorithm.
         r2_array (np.ndarray):    Array of R-squared values across iterations.
-        seed_value (int or None): Seed value for random number generation (if None, it is chosen by np.random).
     Methods:
         __init__(self, n_components):
             Initializes the ProbabilisticTFA_DynamicFactors class with the specified number of components.
         bands_cholesky(self, cholesky_banded, desired_bands=0):
             Computes the inverse elements of a banded matrix using its Cholesky decomposition.
-        fit(self, X, Y, standardize=True, V_prior=None, track_r2=True, tolerance=1e-6, max_iter=1000, r2_stop=True, r2_iters=100, seed_value=None):
+        fit(self, X, Y, standardize=True, V_prior=None, track_r2=True, tolerance=1e-6, max_iter=1000, r2_stop=True, r2_iters=100, rng=None):
             Fits the model to the given data using the EM algorithm.
         fitted(self, standardize=True, prediction_variance=False):
             Computes the fitted values for the given data.
@@ -779,11 +776,10 @@ class ProbabilisticTFA_DynamicFactors:
         return Omega[desired_bands:, :]
 
     def fit(self, X, Y, standardize = True, V_prior = None, track_r2 = True,
-            tolerance = 1e-6, max_iter = 1000, r2_stop = True, r2_iters = 25, seed_value = None):
+            tolerance = 1e-6, max_iter = 1000, r2_stop = True, r2_iters = 25, rng = None):
         # Fill in components of the class
         self.max_iter = max_iter
         self.tolerance = tolerance
-        self.seed_value = seed_value
         k = self.n_components
         if V_prior is None:
             self.V_prior = np.eye(k)
@@ -818,7 +814,9 @@ class ProbabilisticTFA_DynamicFactors:
         Z = np.hstack([X, Y])
 
         # Initial values for the parameters
-        L0 = np.random.default_rng(self.seed_value).normal(size = [d, k])
+        if rng is None:
+            rng = np.random.default_rng()
+        L0 = rng.normal(size = [d, k])
         sigma2_x0 = np.var(X, axis = 0).mean()    # Mean variance across features
         sigma2_y0 = np.var(Y, axis = 0).mean()    # Mean variance across targets
         A0 = np.eye(k)
@@ -1027,7 +1025,6 @@ class ProbabilisticPCA:
         max_iter (int):                  Maximum number of iterations for the EM algorithm.
         tolerance (float):               Convergence tolerance for the EM algorithm.
         r2_array (np.ndarray):           Array of R-squared values across iterations if tracking is enabled.
-        seed_value (int or None):        Seed value for random number generation (if None, it is chosen by np.random).
     Methods:
         __init__(self, n_components):
             Initializes the PPCA model with the specified number of components.
@@ -1042,7 +1039,7 @@ class ProbabilisticPCA:
                 max_iter (int):           Maximum number of iterations for the EM algorithm.
                 r2_stop (bool):           Whether to stop based on R-squared convergence.
                 r2_iters (int):           Number of iterations to consider for R-squared convergence.
-                seed_value (int or None): Seed value for random number generation (if None, it is chosen by np.random).
+                rng (np.random.Generator): Random number generator for reproducibility (as in np.random.default_rng()).
         fitted(self, standardize=True, compute_variance=False):
             Computes the fitted values and optionally the prediction variance.
             Parameters:
@@ -1070,11 +1067,10 @@ class ProbabilisticPCA:
         self.factors = None
 
     def fit(self, X, standardize = True, V_prior = None, track_r2 = True,
-            tolerance = 1e-6, max_iter = 1000, r2_stop = False, r2_iters = 25, seed_value = None):
+            tolerance = 1e-6, max_iter = 1000, r2_stop = False, r2_iters = 25, rng = None):
         # Fill in components of the class controlling algorithm
         self.max_iter = max_iter
         self.tolerance = tolerance
-        self.seed_value = seed_value
         k = self.n_components
         if V_prior is None:
             self.V_prior = np.eye(k)
@@ -1098,7 +1094,9 @@ class ProbabilisticPCA:
             X = (X - np.mean(X, axis = 0, where = np.logical_not(X_missing_index))) / np.std(X, axis = 0, where = np.logical_not(X_missing_index))
             
         # Initial values for the parameters
-        L0 = np.random.default_rng(self.seed_value).normal(size = [d, k])
+        if rng is None:
+            rng = np.random.default_rng()
+        L0 = rng.normal(size = [d, k])
         sigma2_0 = X.var(axis = 0).mean()    # Mean variance across features
         
         # Track R-squared of fit if necessary

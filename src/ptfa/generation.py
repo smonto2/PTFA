@@ -4,7 +4,7 @@ import numpy as np
 from scipy.linalg import toeplitz
 
 # Generating from simplest univariate Gaussian data with factors
-def generate_data_simple(T, p, q, k, sigma_x, sigma_y, seed_value=None):
+def generate_data_simple(T, p, q, k, sigma_x, sigma_y, rng=None):
     """
     Input: 
         T          - Sample size
@@ -13,7 +13,7 @@ def generate_data_simple(T, p, q, k, sigma_x, sigma_y, seed_value=None):
         k          - Number of factors (components)
         sigma_x    - Scale of features
         sigma_y    - Scale of targets
-        seed_value - If None, random seed used every time. Otherwise, seed passed to RNG
+        rng        - Random number generator (as in np.random.default_rng())
     Output:
         X - Features (T x p matrix)
         Y - Targets  (T x q matrix)
@@ -22,7 +22,8 @@ def generate_data_simple(T, p, q, k, sigma_x, sigma_y, seed_value=None):
         Q - Loadings of target equation (q x k matrix)
     """
     # Generate latent variables
-    rng = np.random.default_rng(seed=seed_value)
+    if rng is None:
+        rng = np.random.default_rng()
     F = rng.normal(size = [T, k])
     
     # Generate loadings
@@ -36,7 +37,7 @@ def generate_data_simple(T, p, q, k, sigma_x, sigma_y, seed_value=None):
     return X, Y, F, P, Q
 
 # Generating from targeted factor model with Toeplitz covariance matrices
-def generate_data_system(T, p, q, k, sigma_x, sigma_y, seed_value=None):
+def generate_data_system(T, p, q, k, sigma_x, sigma_y, rng=None):
     """
     Input: 
         T          - Sample size
@@ -45,7 +46,7 @@ def generate_data_system(T, p, q, k, sigma_x, sigma_y, seed_value=None):
         k          - Number of factors (components)
         sigma_x    - Vector with components for Toeplitz structure in covariance matrix of features (size T)
         sigma_y    - Vector with components for Toeplitz structure in covariance matrix of targets (size T)
-        seed_value - If None, random seed used every time. Otherwise, seed passed to RNG
+        rng        - Random number generator (as in np.random.default_rng())
     Output:
         X       - Features (T x p matrix)
         Y       - Targets  (T x q matrix)
@@ -56,7 +57,8 @@ def generate_data_system(T, p, q, k, sigma_x, sigma_y, seed_value=None):
         Sigma_y - Covariance matrix of targets
     """
     # Generate latent variables
-    rng = np.random.default_rng(seed=seed_value)
+    if rng is None:
+        rng = np.random.default_rng()
     F = rng.normal(size = [T, k])
     
     # Generate loadings
@@ -74,7 +76,7 @@ def generate_data_system(T, p, q, k, sigma_x, sigma_y, seed_value=None):
     return X, Y, F, P, Q, Sigma_x, Sigma_y
 
 # Generating from targeted factor model with predetermined general errors
-def generate_data_generalerrors(T, p, q, k, E_X, E_Y, seed_value=None):
+def generate_data_generalerrors(T, p, q, k, E_X, E_Y, rng=None):
     """
     Input: 
         T          - Sample size
@@ -83,7 +85,7 @@ def generate_data_generalerrors(T, p, q, k, E_X, E_Y, seed_value=None):
         k          - Number of factors (components)
         E_X        - Matrix of errors for features (T x p)
         E_Y        - Matrix of errors for targets (T x q)
-        seed_value - If None, random seed used every time. Otherwise, seed passed to RNG
+        rng        - Random number generator (as in np.random.default_rng())
     Output:
         X       - Features (T x p matrix)
         Y       - Targets  (T x q matrix)
@@ -92,7 +94,8 @@ def generate_data_generalerrors(T, p, q, k, E_X, E_Y, seed_value=None):
         Q       - Loadings of target equation (q x k matrix)
     """
     # Generate latent variables
-    rng = np.random.default_rng(seed=seed_value)
+    if rng is None:
+        rng = np.random.default_rng()
     F = rng.normal(size = [T, k])
     
     # Generate loadings
@@ -107,7 +110,7 @@ def generate_data_generalerrors(T, p, q, k, E_X, E_Y, seed_value=None):
 
 # Generate data from the simplest model with missing-at-random entries
 def generate_data_missingatrandom(T, p, q, k, sigma_x, sigma_y,
-                                  proportion_x=0.1, proportion_y=None, seed_value=None, return_nan=True):
+                                  proportion_x=0.1, proportion_y=None, rng=None, return_nan=True):
     """
     Input: 
         T            - Sample size
@@ -118,7 +121,7 @@ def generate_data_missingatrandom(T, p, q, k, sigma_x, sigma_y,
         sigma_y      - Scale of targets
         proportion_x - Percentage of missing-at-random observations in feature matrix
         proportion_y - Percentage of missing-at-random observations in target matrix (= proportion_x if None)
-        seed_value   - If None, random seed used every time. Otherwise, seed passed to RNG
+        rng         - Random number generator (as in np.random.default_rng())
     Output:
         X - Features (T x p Numpy masked array with fill_value=0.0)
         Y - Targets  (T x q Numpy masked array with fill_value=0.0)
@@ -127,7 +130,8 @@ def generate_data_missingatrandom(T, p, q, k, sigma_x, sigma_y,
         Q - Loadings of target equation (q x k matrix)
     """
     # Generate latent variables
-    rng = np.random.default_rng(seed=seed_value)
+    if rng is None:
+        rng = np.random.default_rng()
     F = rng.normal(size = [T, k])
     
     # Generate loadings
@@ -163,7 +167,7 @@ def generate_data_missingatrandom(T, p, q, k, sigma_x, sigma_y,
     return X, Y, F, P, Q
 
 # Generate from a mixed-frequency version of the model
-def generate_data_mixedfrequency(high_frequency_T, low_frequency_T, periods, p, q, k, sigma_x, sigma_y, seed_value=None):
+def generate_data_mixedfrequency(high_frequency_T, low_frequency_T, periods, p, q, k, sigma_x, sigma_y, rng=None):
     """
     Input: 
         high_frequency_T - Number of high-frequency observations (size of features)
@@ -174,7 +178,7 @@ def generate_data_mixedfrequency(high_frequency_T, low_frequency_T, periods, p, 
         k                - Number of factors (components)
         sigma_x          - Scale of features
         sigma_y          - Scale of targets
-        seed_value       - If None, random seed used every time. Otherwise, seed passed to RNG
+        rng              - Random number generator (as in np.random.default_rng())
     Output:
         X        - High-frequency features (high_frequency_T x p matrix)
         Y        - Low-frequency targets  (low_frequency_T x q matrix)
@@ -188,7 +192,8 @@ def generate_data_mixedfrequency(high_frequency_T, low_frequency_T, periods, p, 
         raise AssertionError("Provide arguments such that (low_frequency_T - 1) * periods < high_frequency_T <= low_frequency_T * periods")
 
     # Generate latent variables
-    rng = np.random.default_rng(seed=seed_value)
+    if rng is None:
+        rng = np.random.default_rng()
     F = rng.normal(size = [high_frequency_T, k])
     
     # Generate loadings
@@ -212,7 +217,7 @@ def generate_data_mixedfrequency(high_frequency_T, low_frequency_T, periods, p, 
     return X, Y, F, P, Q, Y_latent
 
 # Add univariate stochastic volatility through EWMA processes
-def generate_data_stochasticvolatility(T, p, q, k, sigma2_x0=0.5, sigma2_y0=0.5, lambda_x=0.9, lambda_y=0.9, seed_value=None):
+def generate_data_stochasticvolatility(T, p, q, k, sigma2_x0=0.5, sigma2_y0=0.5, lambda_x=0.9, lambda_y=0.9, rng=None):
     """
     Input: 
         T          - Sample size
@@ -223,7 +228,7 @@ def generate_data_stochasticvolatility(T, p, q, k, sigma2_x0=0.5, sigma2_y0=0.5,
         sigma2_y0  - Initial variance of targets and variance of moving average component of target volatility
         lambda_x   - Smoothing parameter for generating stochastic volatility in features according to EWMA
         lambda_y   - Smoothing parameter for generating stochastic volatility in targets according to EWMA
-        seed_value - If None, random seed used every time. Otherwise, seed passed to RNG
+        rng        - Random number generator (as in np.random.default_rng())
     Output:
         X        - Features (T x p matrix, masked array with fill_value=0.0 if return_nan = False)
         Y        - Targets  (T x q matrix, masked array with fill_value=0.0 if return_nan = False)
@@ -234,7 +239,8 @@ def generate_data_stochasticvolatility(T, p, q, k, sigma2_x0=0.5, sigma2_y0=0.5,
         sigma2_y - Vector of variances for targets (T-dimensional vector)
     """
     # Generate latent variables
-    rng = np.random.default_rng(seed=seed_value)
+    if rng is None:
+        rng = np.random.default_rng()
     F = rng.normal(size = [T, k])
     
     # Generate loadings
@@ -258,7 +264,7 @@ def generate_data_stochasticvolatility(T, p, q, k, sigma2_x0=0.5, sigma2_y0=0.5,
     return X, Y, F, P, Q, sigma2_x, sigma2_y
 
 # Add a dynamic VAR(1) factor equation to our standard specification
-def generate_data_dynamicfactors(T, p, q, k, sigma_x, sigma_y, A, f0, seed_value=None):
+def generate_data_dynamicfactors(T, p, q, k, sigma_x, sigma_y, A, f0, rng=None):
     """
     Input: 
         T          - Sample size
@@ -269,7 +275,7 @@ def generate_data_dynamicfactors(T, p, q, k, sigma_x, sigma_y, A, f0, seed_value
         sigma_y    - Scale of targets
         A          - Coefficients used to generate dynamics (k x k matrix)
         f0         - Initial condition used to generate dynamics (length k vector)
-        seed_value - If None, random seed used every time. Otherwise, seed passed to RNG
+        rng        - Random number generator (as in np.random.default_rng())
     Output:
         X - Features (T x p matrix)
         Y - Targets  (T x q matrix)
@@ -278,7 +284,8 @@ def generate_data_dynamicfactors(T, p, q, k, sigma_x, sigma_y, A, f0, seed_value
         Q - Loadings of target equation (q x k matrix)
     """
     # Generate latent variables
-    rng = np.random.default_rng(seed=seed_value)
+    if rng is None:
+        rng = np.random.default_rng()
     F = np.zeros([T, k])
     v = rng.normal(size = [T, k])
     F[0] = A @ f0 + v[0]
