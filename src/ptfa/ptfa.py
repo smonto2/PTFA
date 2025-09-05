@@ -65,7 +65,6 @@ class ProbabilisticTFA:
         # Fill in components of the class controlling algorithm
         self.max_iter = max_iter
         self.tolerance = tolerance
-        k = self.n_components
         if V_prior is None:
             self.V_prior = np.eye(k)
         self.V_prior_inv = np.eye(k) if V_prior is None else np.linalg.inv(V_prior)
@@ -75,18 +74,21 @@ class ProbabilisticTFA:
         T, p = X.shape
         _, q = Y.shape
         d = p + q
+        k = self.n_components
         
         # Obtain indices of missing observations to create masked objects and initial imputation step
         if not np.ma.isMaskedArray(X):
             X_missing_index = np.isnan(X)
-            if np.any(X_missing_index):
+            X_missing_flag = np.any(X_missing_index)
+            if X_missing_flag:
                 X[X_missing_index] = 0.0
         else:
             X_missing_index = X.mask
             X = X.filled(fill_value=0.0)
         if not np.ma.isMaskedArray(Y):
             Y_missing_index = np.isnan(Y)
-            if np.any(Y_missing_index):
+            Y_missing_flag = np.any(Y_missing_index)
+            if Y_missing_flag:
                 Y[Y_missing_index] = 0.0
         else:
             Y_missing_index = Y.mask
@@ -117,11 +119,11 @@ class ProbabilisticTFA:
             M = Z @ L_scaled @ Omega
 
             # If any missing data, update imputation step using current EM fit
-            if np.any(X_missing_index):
+            if X_missing_flag:
                 X_hat = M @ L0[:p].T
                 X[X_missing_index] = X_hat[X_missing_index]
                 Z[:, :p] = X
-            if np.any(Y_missing_index):
+            if Y_missing_flag:
                 Y_hat = M @ L0[p:].T
                 Y[Y_missing_index] = Y_hat[Y_missing_index]
                 Z[:, p:] = Y
@@ -292,17 +294,17 @@ class ProbabilisticTFA_MixedFrequency:
         self.max_iter = max_iter
         self.tolerance = tolerance
         self.periods = periods
-        k = self.n_components
         if V_prior is None:
             self.V_prior = np.eye(k)
         self.V_prior_inv = np.eye(k) if V_prior is None else np.linalg.inv(V_prior)
         
         # Obtain sizes and missing indices
         # X is assumed inputed as high_frequency_T x p; Y is low_frequency_T x q
-        # Future: Implement periods that changes for each low frequency interval
+        # Future: Implement `periods` as a list where each element is a low frequency interval to allow for irregular sampling
         low_frequency_T, q = Y.shape
         _, p = X.shape
         self.low_frequency_T = low_frequency_T
+        k = self.n_components
         
         # Obtain indices of missing observations
         if not np.ma.isMaskedArray(X):
@@ -312,7 +314,8 @@ class ProbabilisticTFA_MixedFrequency:
             X = X.data
         if not np.ma.isMaskedArray(Y):
             Y_missing_index = np.isnan(Y)
-            if np.any(Y_missing_index):
+            Y_missing_flag = np.any(Y_missing_index)
+            if Y_missing_flag:
                 Y[Y_missing_index] = 0.0
         else:
             Y_missing_index = Y.mask
@@ -327,6 +330,7 @@ class ProbabilisticTFA_MixedFrequency:
         # Also initial imputation step
         reshaped_X = self.highfrequency_to_lowfrequency_reshape(X, low_frequency_T, periods)
         X_missing_index = np.isnan(reshaped_X)
+        X_missing_flag = np.any(X_missing_index)
         reshaped_X[X_missing_index] = 0.0            
         
         # Initial values for the parameters
@@ -364,10 +368,10 @@ class ProbabilisticTFA_MixedFrequency:
                 XM_sum += reshaped_X[:, range(j * p, (j+1) * p)].T @ M[:, range(j * k, (j+1) * k)]
 
             # Update missing data using current EM fitted values
-            if np.any(X_missing_index):
+            if X_missing_flag:
                 reshaped_X_hat = np.hstack([M[:, range(j * k, (j+1) * k)] @ P0.T for j in range(periods)])
                 reshaped_X[X_missing_index] = reshaped_X_hat[X_missing_index]
-            if np.any(Y_missing_index):
+            if Y_missing_flag:
                 Y_hat = (1/periods) * M_sum @ Q0.T
                 Y[Y_missing_index] = Y_hat[Y_missing_index]
             
@@ -525,7 +529,6 @@ class ProbabilisticTFA_StochasticVolatility:
         # Fill in components of the class
         self.max_iter = max_iter
         self.tolerance = tolerance          # EM stopping tolerance
-        k = self.n_components
         if V_prior is None:
             self.V_prior = np.eye(k)
         self.V_prior_inv = np.eye(k) if V_prior is None else np.linalg.inv(V_prior)
@@ -539,18 +542,21 @@ class ProbabilisticTFA_StochasticVolatility:
         T, p = X.shape
         _, q = Y.shape
         d = p + q
+        k = self.n_components
 
        # Obtain indices of missing observations to create masked objects and initial imputation step
         if not np.ma.isMaskedArray(X):
             X_missing_index = np.isnan(X)
-            if np.any(X_missing_index):
+            X_missing_flag = np.any(X_missing_index)
+            if X_missing_flag:
                 X[X_missing_index] = 0.0
         else:
             X_missing_index = X.mask
             X = X.filled(fill_value=0.0)
         if not np.ma.isMaskedArray(Y):
             Y_missing_index = np.isnan(Y)
-            if np.any(Y_missing_index):
+            Y_missing_flag = np.any(Y_missing_index)
+            if Y_missing_flag:
                 Y[Y_missing_index] = 0.0
         else:
             Y_missing_index = Y.mask
@@ -587,11 +593,11 @@ class ProbabilisticTFA_StochasticVolatility:
             V = np.sum(Omega, axis = 0) + M.T @ M
 
             # If any missing data, update imputation step using current EM fit
-            if np.any(X_missing_index):
+            if X_missing_flag:
                 X_hat = M @ L0[:p].T
                 X[X_missing_index] = X_hat[X_missing_index]
                 Z[:, :p] = X
-            if np.any(Y_missing_index):
+            if Y_missing_flag:
                 Y_hat = M @ L0[p:].T
                 Y[Y_missing_index] = Y_hat[Y_missing_index]
                 Z[:, p:] = Y
@@ -780,7 +786,6 @@ class ProbabilisticTFA_DynamicFactors:
         # Fill in components of the class
         self.max_iter = max_iter
         self.tolerance = tolerance
-        k = self.n_components
         if V_prior is None:
             self.V_prior = np.eye(k)
         self.V_prior_inv = np.eye(k) if V_prior is None else np.linalg.inv(V_prior)
@@ -790,18 +795,21 @@ class ProbabilisticTFA_DynamicFactors:
         T, p = X.shape
         _, q = Y.shape
         d = p + q
+        k = self.n_components
 
         # Obtain indices of missing observations to create masked objects and initial imputation step
         if not np.ma.isMaskedArray(X):
             X_missing_index = np.isnan(X)
-            if np.any(X_missing_index):
+            X_missing_flag = np.any(X_missing_index)
+            if X_missing_flag:
                 X[X_missing_index] = 0.0
         else:
             X_missing_index = X.mask
             X = X.filled(fill_value=0.0)
         if not np.ma.isMaskedArray(Y):
             Y_missing_index = np.isnan(Y)
-            if np.any(Y_missing_index):
+            Y_missing_flag = np.any(Y_missing_index)
+            if Y_missing_flag:
                 Y[Y_missing_index] = 0.0
         else:
             Y_missing_index = Y.mask
@@ -855,11 +863,11 @@ class ProbabilisticTFA_DynamicFactors:
             M = linalg.cho_solve_banded((Omega_inv_cholesky, True), b = M, overwrite_b=True).reshape([T, k])
             
             # If any missing data, update imputation step using current EM fit
-            if np.any(X_missing_index):
+            if X_missing_flag:
                 X_hat = M @ L0[:p].T
                 X[X_missing_index] = X_hat[X_missing_index]
                 Z[:, :p] = X
-            if np.any(Y_missing_index):
+            if Y_missing_flag:
                 Y_hat = M @ L0[p:].T
                 Y[Y_missing_index] = Y_hat[Y_missing_index]
                 Z[:, p:] = Y
@@ -1011,7 +1019,7 @@ class ProbabilisticTFA_DynamicFactors:
             return Y_hat, Y_hat_variance
         
 
-# Compering methods for comparison
+# Method for comparison
 class ProbabilisticPCA:
     """
     Probabilistic Principal Component Analysis (PPCA) class for fitting and predicting using a probabilistic model.
@@ -1071,7 +1079,6 @@ class ProbabilisticPCA:
         # Fill in components of the class controlling algorithm
         self.max_iter = max_iter
         self.tolerance = tolerance
-        k = self.n_components
         if V_prior is None:
             self.V_prior = np.eye(k)
         self.V_prior_inv = np.eye(k) if V_prior is None else np.linalg.inv(V_prior)
@@ -1079,11 +1086,13 @@ class ProbabilisticPCA:
         # Obtain sizes and missing indices
         # X is T x d; Factors assumed as T x k
         T, d = X.shape
+        k = self.n_components
         
         # Obtain indices of missing observations to create masked objects and initial imputation step
         if not np.ma.isMaskedArray(X):
             X_missing_index = np.isnan(X)
-            if np.any(X_missing_index):
+            X_missing_flag = np.any(X_missing_index)
+            if X_missing_flag:
                 X[X_missing_index] = 0.0
         else:
             X_missing_index = X.mask
@@ -1111,7 +1120,7 @@ class ProbabilisticPCA:
             M = X @ L_scaled @ Omega
 
             # If any missing data, update imputation step using current EM fit
-            if np.any(X_missing_index):
+            if X_missing_flag:
                 X_hat = M @ L0[:d].T
                 X[X_missing_index] = X_hat[X_missing_index]
 
