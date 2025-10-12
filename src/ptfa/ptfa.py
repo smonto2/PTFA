@@ -62,19 +62,19 @@ class ProbabilisticTFA:
 
     def fit(self, X, Y, standardize = True, V_prior = None, track_r2 = True,
             tolerance = 1e-6, max_iter = 1000, r2_stop = True, r2_iters = 25, rng = None):
-        # Fill in components of the class controlling algorithm
-        self.max_iter = max_iter
-        self.tolerance = tolerance
-        if V_prior is None:
-            self.V_prior = np.eye(k)
-        self.V_prior_inv = np.eye(k) if V_prior is None else np.linalg.inv(V_prior)
-        
-        # Obtain sizes and missing indices
+        # Obtain sizes
         # X is T x p; Y is T x q; Factors assumed as T x k
         T, p = X.shape
         _, q = Y.shape
         d = p + q
         k = self.n_components
+        
+        # Fill in components of the class controlling algorithm
+        self.max_iter = max_iter
+        self.tolerance = tolerance
+        if V_prior is None:
+            self.V_prior = np.eye(k)
+        self.V_prior_inv = np.eye(k) if V_prior is None else linalg.inv(V_prior)
         
         # Obtain indices of missing observations to create masked objects and initial imputation step
         if not np.ma.isMaskedArray(X):
@@ -112,10 +112,10 @@ class ProbabilisticTFA:
             r2_list = []
         
         # Start EM algorithm main loop
-        for i in range(self.max_iter):
+        for it in range(self.max_iter):
             # Expectation step: Update posterior paramater for factors
             L_scaled = np.vstack([L0[:p] / sigma2_x0, L0[p:] / sigma2_y0])
-            Omega = np.linalg.inv(self.V_prior_inv + L0.T @ L_scaled)
+            Omega = linalg.inv(self.V_prior_inv + L0.T @ L_scaled)
             M = Z @ L_scaled @ Omega
 
             # If any missing data, update imputation step using current EM fit
@@ -130,15 +130,15 @@ class ProbabilisticTFA:
 
             # Maximization step: Update factor loadings and variances
             V = T * Omega + M.T @ M
-            L1 = np.linalg.solve(V, M.T @ Z).T
-            P = L1[:p]
-            Q = L1[p:]
-            sigma2_x1 = (1/(T * p)) * (np.sum(X**2) - np.trace(P.T @ P @ V))
-            sigma2_y1 = (1/(T * q)) * (np.sum(Y**2) - np.trace(Q.T @ Q @ V))
-            
+            L1 = linalg.solve(V, M.T @ Z).T
+            P1 = L1[:p]
+            Q1 = L1[p:]
+            sigma2_x1 = (1/(T * p)) * (np.sum(X**2) - np.trace(P1.T @ P1 @ V))
+            sigma2_y1 = (1/(T * q)) * (np.sum(Y**2) - np.trace(Q1.T @ Q1 @ V))
+
             # Compute distance between iterates
-            P_distance = np.linalg.norm(P - L0[:p], "fro")
-            Q_distance = np.linalg.norm(Q - L0[p:], "fro")
+            P_distance = linalg.norm(P1 - L0[:p], "fro")
+            Q_distance = linalg.norm(Q1 - L0[p:], "fro")
             sigma_x_distance = np.abs(sigma2_x1 - sigma2_x0)
             sigma_y_distance = np.abs(sigma2_y1 - sigma2_y0)
             theta_distance = max([P_distance, Q_distance, sigma_x_distance, sigma_y_distance])
@@ -146,13 +146,17 @@ class ProbabilisticTFA:
             # Prediction and tracking of R-squared across iterations
             if track_r2 or r2_stop:
                 # Save current value of R-squared
-                Y_hat = M @ Q.T
+                Y_hat = M @ Q1.T
                 r2_values = r2_score(Y, Y_hat, multioutput = "raw_values")
                 r2_list.append(r2_values)
 
+                # # Save parameter values with the best R-squared so far
+                # if it == 0 or np.mean(r2_values) >= np.mean(r2_list[-2]):
+                #     best_P, best_Q, best_sigma2_x, best_sigma2_y = (P1, Q1, sigma2_x1, sigma2_y1)
+
             # Check convergence condition
             convergence = (theta_distance <= self.tolerance)
-            if r2_stop and i >= r2_iters:
+            if r2_stop and it >= r2_iters:
                 # Add stopping condition based on history of R-squared across iterations
                 r2_convergence = np.allclose(np.mean(r2_list[-r2_iters:]),    # Average of previous r_iters values
                                              np.mean(r2_list[-1]),            # Current value
@@ -168,8 +172,8 @@ class ProbabilisticTFA:
                 sigma2_y0 = sigma2_y1
         
         # Update values of the class with results from EM algorithm
-        self.P = P
-        self.Q = Q
+        self.P = P1
+        self.Q = Q1
         self.sigma2_x = sigma2_x1
         self.sigma2_y = sigma2_y1
         self.r2_array = np.asarray(r2_list) if track_r2 else None
@@ -183,9 +187,8 @@ class ProbabilisticTFA:
         if not compute_variance:
             return Y_hat
         else:
-            q = self.Q.shape[0]
             Omega_inverse = self.V_prior_inv + self.P.T @ (self.P / self.sigma2_x) + self.Q.T @ (self.Q / self.sigma2_y)
-            Y_hat_variance = self.sigma2_y * np.eye(q) + self.Q @ np.linalg.solve(Omega_inverse, self.Q.T)
+            Y_hat_variance = self.Q @ linalg.solve(Omega_inverse, self.Q.T)
             return Y_hat, Y_hat_variance
 
     def predict(self, X, standardize = True, compute_variance = False):
@@ -208,7 +211,7 @@ class ProbabilisticTFA:
         # Obtains predicted factors using X only: F_predicted = M (Posterior mean of factors)
         P_scaled = self.P / self.sigma2_x
         Omega_X_inverse = self.V_prior_inv + self.P.T @ P_scaled
-        F_predicted = np.linalg.solve(Omega_X_inverse, P_scaled.T @ X.T).T
+        F_predicted = linalg.solve(Omega_X_inverse, P_scaled.T @ X.T).T
 
         # PTFA out-of-sample prediction:
         Y_hat = F_predicted @ self.Q.T
@@ -218,300 +221,66 @@ class ProbabilisticTFA:
             return Y_hat
         else:
             q = self.Q.shape[0]
-            Y_hat_variance = self.sigma2_y * np.eye(q) + self.Q @ np.linalg.solve(Omega_X_inverse, self.Q.T)
-            return Y_hat, Y_hat_variance
-
-class ProbabilisticTFA_MixedFrequency:
-    """
-    A class to perform Probabilistic Targeted Factor Analysis (TFA) with mixed frequency data.
-    Attributes
-    ----------
-    n_components : int
-        Number of latent factors.
-    P : np.ndarray
-        Factor loadings for high-frequency predictors.
-    Q : np.ndarray
-        Factor loadings for low-frequency targets.
-    sigma2_x : float
-        Variance of high-frequency predictors.
-    sigma2_y : float
-        Variance of low-frequency targets.
-    factors : np.ndarray
-        Estimated factors.
-    V_prior : np.ndarray
-        Prior covariance matrix for factors.
-    max_iter : int
-        Maximum number of iterations for the EM algorithm.
-    tolerance : float
-        Tolerance for convergence of the EM algorithm.
-    r2_array : np.ndarray
-        Array of R-squared values across iterations.
-    Methods
-    -------
-    highfrequency_to_lowfrequency_reshape(X, low_frequency_T, periods):
-        Reshape high-frequency data to low-frequency data.
-    fit(X, Y, periods, standardize=True, V_prior=None, track_r2=True, tolerance=1e-6, max_iter=1000, r2_stop=True, r2_iters=100, rng=None):
-        Fit the model using the EM algorithm.
-    fitted(compute_variance=False):
-        Obtain fitted values for the low-frequency targets.
-    predict(X, low_frequency_T, periods, standardize=True):
-        Predict low-frequency targets using the fitted model.
-    """
-    def __init__(self, n_components):
-        # Fill in components of the class
-        self.n_components = n_components
-        
-        # Pre-allocate memory for estimates
-        self.P = None
-        self.Q = None
-        self.sigma2_x = None
-        self.sigma2_y = None
-        self.factors = None
-        self.periods = None
-        self.low_frequency_T = None
-
-    def highfrequency_to_lowfrequency_reshape(self, X, low_frequency_T, periods):
-        # Obtain available periods and any remainder needed to be filled out
-        high_frequency_T, p = X.shape
-        last_T = periods * (low_frequency_T - 1)
-        remainder_T = high_frequency_T - last_T
-
-        # Pre-allocate reshaped object and fill out available information
-        reshaped_X = np.zeros([low_frequency_T, p * periods])
-        for t in range(low_frequency_T - 1):
-            row_index = range(t * periods, (t+1) * periods)
-            reshaped_X[t] = np.ravel(X[row_index])
-
-        # Fill out information corresponding to last entry (needed if remainder_T > 0)
-        row_index = range(last_T, last_T + remainder_T)
-        reshaped_X[low_frequency_T - 1, :(p * remainder_T)] = np.ravel(X[row_index])
-        reshaped_X[low_frequency_T - 1, (p * remainder_T):] = np.nan
-        return reshaped_X
-
-    def fit(self, X, Y, periods, standardize = True, V_prior = None, track_r2 = True,
-            tolerance = 1e-6, max_iter = 1000, r2_stop = True, r2_iters = 25, rng = None):
-        # Fill in components of the class
-        self.max_iter = max_iter
-        self.tolerance = tolerance
-        self.periods = periods
-        if V_prior is None:
-            self.V_prior = np.eye(k)
-        self.V_prior_inv = np.eye(k) if V_prior is None else np.linalg.inv(V_prior)
-        
-        # Obtain sizes and missing indices
-        # X is assumed inputed as high_frequency_T x p; Y is low_frequency_T x q
-        # Future: Implement `periods` as a list where each element is a low frequency interval to allow for irregular sampling
-        low_frequency_T, q = Y.shape
-        _, p = X.shape
-        self.low_frequency_T = low_frequency_T
-        k = self.n_components
-        
-        # Obtain indices of missing observations
-        if not np.ma.isMaskedArray(X):
-            X_missing_index = np.isnan(X)
-        else:
-            X_missing_index = X.mask
-            X = X.data
-        if not np.ma.isMaskedArray(Y):
-            Y_missing_index = np.isnan(Y)
-            Y_missing_flag = np.any(Y_missing_index)
-            if Y_missing_flag:
-                Y[Y_missing_index] = 0.0
-        else:
-            Y_missing_index = Y.mask
-            Y = Y.filled(fill_value=0.0)
-
-        # Center and scale predictors and targets separately
-        if standardize:
-            X = (X - np.mean(X, axis = 0, where = np.logical_not(X_missing_index))) / np.std(X, axis = 0, where = np.logical_not(X_missing_index))
-            Y = (Y - np.mean(Y, axis = 0, where = np.logical_not(Y_missing_index))) / np.std(Y, axis = 0, where = np.logical_not(Y_missing_index))
-        
-        # Re-shape X into an low_frequency_T x (p * periods)
-        # Also initial imputation step
-        reshaped_X = self.highfrequency_to_lowfrequency_reshape(X, low_frequency_T, periods)
-        X_missing_index = np.isnan(reshaped_X)
-        X_missing_flag = np.any(X_missing_index)
-        reshaped_X[X_missing_index] = 0.0            
-        
-        # Initial values for the parameters
-        if rng is None:
-            rng = np.random.default_rng()
-        P0 = rng.normal(size = [p, k])
-        Q0 = rng.normal(size = [q, k])
-        sigma2_x0 = np.var(X, axis = 0).mean()    # Mean variance across features
-        sigma2_y0 = np.var(Y, axis = 0).mean()    # Mean variance across targets
-
-        # Track R-squared of fit if necessary
-        if track_r2 or r2_stop:
-            r2_list = []
-
-        # Start EM algorithm main loop
-        J_periods = np.full([periods, periods], 1 / periods)
-        for i in range(self.max_iter):
-            # Expectation step: Update posterior paramater for factors
-            P_scaled = P0 / sigma2_x0
-            Q_scaled = Q0 / sigma2_y0
-            Omega_P_term = np.kron(np.eye(periods), self.V_prior_inv + P0.T @ P_scaled)
-            Omega_Q_term = np.kron(J_periods, Q0.T @ Q_scaled)
-            Omega = np.linalg.inv(Omega_P_term + Omega_Q_term)
-            ZL_matrix = np.zeros([low_frequency_T, periods * k])
-            Y_times_Q = Y @ Q_scaled
-            for j in range(periods):
-                ZL_matrix[:, range(j * k, (j+1) * k)] = reshaped_X[:, range(j * p, (j+1) * p)] @ P_scaled + Y_times_Q
-            M = ZL_matrix @ Omega
-            
-            # Update low-frequency prediction and additional necessary quantities
-            M_sum = 0
-            XM_sum = 0
-            for j in range(periods):
-                M_sum += M[:, range(j * k, (j+1) * k)]
-                XM_sum += reshaped_X[:, range(j * p, (j+1) * p)].T @ M[:, range(j * k, (j+1) * k)]
-
-            # Update missing data using current EM fitted values
-            if X_missing_flag:
-                reshaped_X_hat = np.hstack([M[:, range(j * k, (j+1) * k)] @ P0.T for j in range(periods)])
-                reshaped_X[X_missing_index] = reshaped_X_hat[X_missing_index]
-            if Y_missing_flag:
-                Y_hat = (1/periods) * M_sum @ Q0.T
-                Y[Y_missing_index] = Y_hat[Y_missing_index]
-            
-            # Maximization step: Update factor loadings and variances
-            V_array = np.reshape(low_frequency_T * Omega + M.T @ M, [periods, k, periods, k]).transpose(0, 2, 1, 3)
-            V_diagsum = np.einsum('iijk->jk', V_array)
-            V_allsum = np.einsum('ijkl->kl', V_array)
-            P1 = np.linalg.solve(V_diagsum, XM_sum.T).T
-            Q1 = periods * np.linalg.solve(V_allsum, M_sum.T @ Y).T
-            Y_hat = (1/periods) * M_sum @ Q1.T
-            sigma2_x1 = (1/(low_frequency_T * p * periods)) * (np.sum(X**2) - np.trace(P1.T @ P1 @ V_diagsum))
-            sigma2_y1 = (periods/(low_frequency_T * q)) * np.sum(Y * (Y - Y_hat))
-            
-            # Compute distance between iterates
-            P_distance = np.linalg.norm(P1 - P0, "fro")
-            Q_distance = np.linalg.norm(Q1 - Q0, "fro")
-            sigma_x_distance = np.abs(sigma2_x1 - sigma2_x0)
-            sigma_y_distance = np.abs(sigma2_y1 - sigma2_y0)
-            theta_distance = max([P_distance, Q_distance, sigma_x_distance, sigma_y_distance])
-            
-            # Prediction and tracking of R-squared across iterations
-            if track_r2 or r2_stop:
-                r2_values = r2_score(Y, Y_hat, multioutput = "raw_values")
-                r2_list.append(r2_values)
-
-            # Check convergence condition
-            convergence = (theta_distance <= self.tolerance)
-            if r2_stop and i >= r2_iters:
-                # Add stopping condition based on history of R-squared across iterations
-                r2_convergence = np.allclose(np.mean(r2_list[-r2_iters:]),    # Average of previous r_iters values
-                                             np.mean(r2_list[-1]),            # Current value
-                                             self.tolerance)
-                convergence = convergence or r2_convergence
-            if convergence:
-                # Break if distance between each estimate is less than a tolerance
-                break
-            else:
-                # Prepare values for next iteration if convergence not reached
-                P0 = P1
-                Q0 = Q1
-                sigma2_x0 = sigma2_x1
-                sigma2_y0 = sigma2_y1
-        
-        # Update values of the class with results from EM algorithm
-        self.P = P1
-        self.Q = Q1
-        self.sigma2_x = sigma2_x1
-        self.sigma2_y = sigma2_y1
-        self.r2_array = np.asarray(r2_list) if track_r2 else None
-        self.factors = M
-
-    def fitted(self, compute_variance = False):
-        # PTFA prediction in-sample:
-        k = self.n_components
-        F_sum = sum([self.factors[:, range(j * k, (j+1) * k)] for j in range(self.periods)])
-        Y_hat = (1/self.periods) * F_sum @ self.Q.T
-        
-        # Return value depends on whether fitted variance is also required
-        if not compute_variance:
-            return Y_hat
-        else:
-            q = self.Q.shape[0]
-            Omega_inverse = self.V_prior_inv + self.P.T @ (self.P / self.sigma2_x) + self.Q.T @ (self.Q / self.sigma2_y)
-            Q_Omega_Q = ( self.Q @ np.kron(np.ones([1, self.periods]), np.eye(k)) @
-                            np.linalg.solve(Omega_inverse, np.kron(np.ones(self.periods), np.eye(k)) @ self.Q.T) )
-            Y_hat_variance = (1/self.periods**2) * Q_Omega_Q + (1/self.periods) * self.sigma2_y * np.eye(q)
-            return Y_hat, Y_hat_variance
-    
-    def predict(self, X, standardize = True, compute_variance = False):
-        # Obtain necessary sizes
-        _, p = X.shape
-        k = self.n_components
-
-        # Obtain indices of missing observations
-        if not np.ma.isMaskedArray(X):
-            X_missing_index = np.isnan(X)
-        else:
-            X_missing_index = X.mask
-            X = X.data
-        
-        # Center and scale predictors if required
-        if standardize:
-            X = (X - np.mean(X, axis = 0, where = np.logical_not(X_missing_index))) / np.std(X, axis = 0, where = np.logical_not(X_missing_index))
-
-        # Re-shape X into an low_frequency_T x (p * periods), padding if necessary
-        reshaped_X = self.highfrequency_to_lowfrequency_reshape(X, self.low_frequency_T, self.periods)
-        
-        # Imputation step using EM fit if required
-        X_missing_index = np.isnan(reshaped_X)
-        if np.any(X_missing_index):
-            reshaped_X_hat = np.hstack([self.factors[:, range(j * k, (j+1) * k)] @ self.P.T for j in range(self.periods)])
-            reshaped_X[X_missing_index] = reshaped_X_hat[X_missing_index]
-            
-        # Obtain predicted factors: F_predicted = M (Posterior mean of factors)
-        P_scaled = self.P / self.sigma2_x
-        Omega_P_term = np.kron(np.eye(self.periods), self.V_prior_inv + self.P.T @ P_scaled)
-        XP_matrix = np.zeros([self.low_frequency_T, self.periods * k])
-        for j in range(self.periods):
-            XP_matrix[:, range(j * k, (j+1) * k)] = reshaped_X[:, range(j * p, (j+1) * p)] @ P_scaled
-        F_predicted = np.linalg.solve(Omega_P_term, XP_matrix.T).T
-        
-        # Predict using estimated factors
-        F_sum = sum([F_predicted[:, range(j * k, (j+1) * k)] for j in range(self.periods)])
-        Y_hat = (1/self.periods) * F_sum @ self.Q.T
-        
-        # Return value depends on whether fitted variance is also required
-        if not compute_variance:
-            return Y_hat
-        else:
-            q = self.Q.shape[0]
-            Q_Omega_Q = ( self.Q @ np.kron(np.ones([1, self.periods]), np.eye(k)) @
-                            np.linalg.solve(Omega_P_term, np.kron(np.ones(self.periods), np.eye(k)) @ self.Q.T) )
-            Y_hat_variance = (1/self.periods**2) * Q_Omega_Q + (1/self.periods) * self.sigma2_y * np.eye(q)
+            Y_hat_variance = self.sigma2_y * np.eye(q) + self.Q @ linalg.solve(Omega_X_inverse, self.Q.T)
             return Y_hat, Y_hat_variance
 
 class ProbabilisticTFA_StochasticVolatility:
     """
-    A class to perform Probabilistic Targeted Factor Analysis (PTFA) with Stochastic Volatility.
+    Probabilistic Targeted Factor Analysis (PTFA) with Stochastic Volatility class for
+    fitting and predicting using time-varying volatilities.
+    
+    This class extends the basic PTFA model to handle time-varying volatilities using separate
+    EWMA (Exponentially Weighted Moving Average) smoothing processes for the predictor and target equations.
+    
     Attributes:
-        n_components (int):       Number of components (factors).
-        P (np.ndarray):           Factor loadings for predictors.
-        Q (np.ndarray):           Factor loadings for targets.
-        sigma2_x (np.ndarray):    Time-varying volatilities for predictors equations.
-        sigma2_y (np.ndarray):    Time-varying volatilities for targets equations.
-        factors (np.ndarray):     Predicted factors.
-        max_iter (int):           Maximum number of iterations for the EM algorithm.
-        tolerance (float):        Convergence tolerance for the EM algorithm.
-        ewma_lambda_x (float):    EWMA smoothing parameter for predictors.
-        ewma_lambda_y (float):    EWMA smoothing parameter for targets.
-        V_prior (np.ndarray):     Prior covariance matrix for factors.
-        r2_array (np.ndarray):    Array of R-squared values across iterations.
+        n_components (int):     Number of components (factors) to estimate.
+        P (np.ndarray):         Estimated loadings for predictors.
+        Q (np.ndarray):         Estimated loadings for targets.
+        sigma2_x (np.ndarray):  Time-varying volatilities for predictors equations of shape (T,).
+        sigma2_y (np.ndarray):  Time-varying volatilities for targets equations of shape (T,).
+        factors (np.ndarray):   Predicted factors.
+        V_prior (np.ndarray):   Prior covariance matrix for factors.
+        max_iter (int):         Maximum number of iterations for the EM algorithm.
+        tolerance (float):      Convergence tolerance for the EM algorithm.
+        ewma_lambda_x (float):  EWMA smoothing parameter for predictors (default: 0.94).
+        ewma_lambda_y (float):  EWMA smoothing parameter for targets.
+        r2_array (np.ndarray):  Array of R-squared values across iterations if tracking is enabled.
+    
     Methods:
         __init__(self, n_components):
-            Initializes the class with the specified number of components.
-        fit(self, X, Y, standardize=True, ewma_lambda_x=0.94, ewma_lambda_y=None, V_prior=None, track_r2=True, tolerance=1e-6, max_iter=1000, r2_stop=True, r2_iters=100, rng=None):
-            Fits the model to the data using the EM algorithm.
-        fitted(self, standardize=True):
-            Returns the predicted targets using the fitted model.
-        predict(self, X, standardize=True):
-            Predicts the targets using the predictors and the fitted model.
+            Initializes the PTFA with Stochastic Volatility model with the specified number of components.
+        fit(self, X, Y, standardize=True, ewma_lambda_x=0.94, ewma_lambda_y=None, V_prior=None, 
+            track_r2=True, tolerance=1e-6, max_iter=1000, r2_stop=True, r2_iters=100, rng=None):
+            Fits the PTFA model with time-varying volatilities to the given data using an EM algorithm.
+            Parameters:
+                X (np.ndarray):            Predictor data matrix of shape (T, p).
+                Y (np.ndarray):            Target data matrix of shape (T, q).
+                standardize (bool):        Whether to standardize the data before fitting.
+                ewma_lambda_x (float):     EWMA smoothing parameter for predictors volatility.
+                ewma_lambda_y (float):     EWMA smoothing parameter for targets volatility (defaults to ewma_lambda_x).
+                V_prior (np.ndarray):      Prior covariance matrix for factors.
+                track_r2 (bool):           Track R-squared values across iterations.
+                tolerance (float):         Convergence tolerance for the EM algorithm.
+                max_iter (int):            Maximum number of iterations for the EM algorithm.
+                r2_stop (bool):            Whether to stop based on R-squared convergence.
+                r2_iters (int):            Number of iterations to consider for R-squared convergence.
+                rng (np.random.Generator): Random number generator for reproducibility.
+        fitted(self, compute_variance=False):
+            Computes the fitted values and optionally the prediction variance.
+            Parameters:
+                compute_variance (bool):   Whether to compute the prediction variance.
+            Returns:
+                np.ndarray:                Predicted target values.
+                np.ndarray (optional):     Time-varying prediction variance tensor if compute_variance is True.
+        predict(self, X, standardize=True, compute_variance=False):
+            Predicts target values using the fitted PTFA model with stochastic volatility.
+            Parameters:
+                X (np.ndarray):            Predictor data matrix of shape (T, p).
+                standardize (bool):        Whether to standardize the data before predicting.
+                compute_variance (bool):   Whether to compute the prediction variance.
+            Returns:
+                np.ndarray:                Predicted target values.
+                np.ndarray (optional):     Prediction variance matrix if compute_variance is True.
     """
     def __init__(self, n_components):
         # Fill in components of the class
@@ -523,20 +292,10 @@ class ProbabilisticTFA_StochasticVolatility:
         self.sigma2_x = None
         self.sigma2_y = None
         self.factors = None
+        self.Omega = None
 
     def fit(self, X, Y, standardize = True, ewma_lambda_x = 0.94, ewma_lambda_y = None, V_prior = None,
             track_r2 = True, tolerance = 1e-6, max_iter = 1000, r2_stop = True, r2_iters = 25, rng = None):
-        # Fill in components of the class
-        self.max_iter = max_iter
-        self.tolerance = tolerance          # EM stopping tolerance
-        if V_prior is None:
-            self.V_prior = np.eye(k)
-        self.V_prior_inv = np.eye(k) if V_prior is None else np.linalg.inv(V_prior)
-
-        # Specific for stochastic volatility: EWMA smoothing parameter for feature process and targets
-        self.ewma_lambda_x = ewma_lambda_x 
-        self.ewma_lambda_y = ewma_lambda_y if ewma_lambda_y is not None else ewma_lambda_x
-        
         # Obtain sizes
         # X is T x p; Y is T x q; Factors assumed as T x k
         T, p = X.shape
@@ -544,6 +303,17 @@ class ProbabilisticTFA_StochasticVolatility:
         d = p + q
         k = self.n_components
 
+        # Fill in components of the class
+        self.max_iter = max_iter
+        self.tolerance = tolerance          # EM stopping tolerance
+        if V_prior is None:
+            self.V_prior = np.eye(k)
+        self.V_prior_inv = np.eye(k) if V_prior is None else linalg.inv(V_prior)
+
+        # Specific for stochastic volatility: EWMA smoothing parameter for feature process and targets
+        self.ewma_lambda_x = ewma_lambda_x 
+        self.ewma_lambda_y = ewma_lambda_y if ewma_lambda_y is not None else ewma_lambda_x
+        
        # Obtain indices of missing observations to create masked objects and initial imputation step
         if not np.ma.isMaskedArray(X):
             X_missing_index = np.isnan(X)
@@ -584,13 +354,16 @@ class ProbabilisticTFA_StochasticVolatility:
         # Start EM algorithm main loop
         M = np.zeros([T, k])
         Omega = np.zeros([T, k, k])
-        for i in range(self.max_iter):
+        V = np.zeros([T, k, k])
+        for it in range(self.max_iter):
             # Expectation step: Update posterior paramater for factors
             for t in range(T):
-                L_scaled_t = np.vstack([L0[:p] / sigma2_x[t], L0[p:] / sigma2_y[t]])
-                Omega[t] = np.linalg.inv(self.V_prior_inv + L0.T @ L_scaled_t)
+                P0 = L0[:p]
+                Q0 = L0[p:]
+                L_scaled_t = np.vstack([P0 / sigma2_x[t], Q0 / sigma2_y[t]])
+                Omega[t] = linalg.inv(self.V_prior_inv + L0.T @ L_scaled_t)
                 M[t] = Z[t] @ L_scaled_t @ Omega[t]
-            V = np.sum(Omega, axis = 0) + M.T @ M
+                V[t] = Omega[t] + np.outer(M[t], M[t])
 
             # If any missing data, update imputation step using current EM fit
             if X_missing_flag:
@@ -602,25 +375,30 @@ class ProbabilisticTFA_StochasticVolatility:
                 Y[Y_missing_index] = Y_hat[Y_missing_index]
                 Z[:, p:] = Y
 
-            # Maximization step: Update factor loadings
-            L1 = np.linalg.solve(V, M.T @ Z).T
-            P = L1[:p]
-            Q = L1[p:]
-            
+            # Maximization step
+            # Factor loadings update
+            V_x = np.einsum('t,tij->ij', 1/sigma2_x, V)
+            V_y = np.einsum('t,tij->ij', 1/sigma2_y, V)
+            M_x = (M / sigma2_x[:, np.newaxis]).T @ X
+            M_y = (M / sigma2_y[:, np.newaxis]).T @ Y
+            P1 = linalg.solve(V_x, M_x).T
+            Q1 = linalg.solve(V_y, M_y).T
+            L1 = np.vstack([P1, Q1])
+
             # Update volatilities using EWMA
             Z_hat = M @ L1.T
             residuals_Z = Z - Z_hat
-            sigma2_x[0] = (1/p) * (np.sum(residuals_Z[0, :p]**2) + np.trace(P.T @ P @ Omega[0]))
-            sigma2_y[0] = (1/q) * (np.sum(residuals_Z[0, p:]**2) + np.trace(Q.T @ Q @ Omega[0]))
+            sigma2_x[0] = (1/p) * (np.sum(residuals_Z[0, :p]**2) + np.trace(P1.T @ P1 @ Omega[0]))
+            sigma2_y[0] = (1/q) * (np.sum(residuals_Z[0, p:]**2) + np.trace(Q1.T @ Q1 @ Omega[0]))
             for t in range(1, T):
-                hat_sigma2_x_t = (1/p) * (np.sum(residuals_Z[t, :p]**2) + np.trace(P.T @ P @ Omega[t]))
-                hat_sigma2_y_t = (1/q) * (np.sum(residuals_Z[t, p:]**2) + np.trace(Q.T @ Q @ Omega[t]))
+                hat_sigma2_x_t = (1/p) * (np.sum(residuals_Z[t, :p]**2) + np.trace(P1.T @ P1 @ Omega[t]))
+                hat_sigma2_y_t = (1/q) * (np.sum(residuals_Z[t, p:]**2) + np.trace(Q1.T @ Q1 @ Omega[t]))
                 sigma2_x[t] = self.ewma_lambda_x * sigma2_x[t-1] + (1 - self.ewma_lambda_x) * hat_sigma2_x_t
                 sigma2_y[t] = self.ewma_lambda_y * sigma2_y[t-1] + (1 - self.ewma_lambda_y) * hat_sigma2_y_t
             
             # Compute distance between iterates
-            P_distance = np.linalg.norm(P - L0[:p], "fro")
-            Q_distance = np.linalg.norm(Q - L0[p:], "fro")
+            P_distance = linalg.norm(P1 - P0, "fro")
+            Q_distance = linalg.norm(Q1 - Q0, "fro")
             theta_distance = max([P_distance, Q_distance])
             
             # Prediction and tracking of R-squared across iterations
@@ -630,7 +408,7 @@ class ProbabilisticTFA_StochasticVolatility:
 
             # Check convergence condition
             convergence = (theta_distance <= self.tolerance)
-            if r2_stop and i >= r2_iters:
+            if r2_stop and it >= r2_iters:
                 # Add stopping condition based on history of R-squared across iterations
                 r2_convergence = np.allclose(np.mean(r2_list[-r2_iters:]),    # Average of previous r_iters values
                                              np.mean(r2_list[-1]),            # Current value
@@ -644,12 +422,13 @@ class ProbabilisticTFA_StochasticVolatility:
                 L0 = L1
                 
         # Update final values of the class with results from EM algorithm
-        self.P = P
-        self.Q = Q
+        self.P = P1
+        self.Q = Q1
         self.sigma2_x = sigma2_x
         self.sigma2_y = sigma2_y
         self.r2_array = np.asarray(r2_list) if track_r2 else None
         self.factors = M
+        self.Omega = Omega
         
     def fitted(self, compute_variance = False):
         # PTFA prediction in-sample:
@@ -663,9 +442,8 @@ class ProbabilisticTFA_StochasticVolatility:
             T = self.factors.shape[0]
             Y_hat_variance = np.zeros([T, q, q])
             for t in range(T):
-                Omega_inverse_t = self.V_prior_inv + self.P.T @ (self.P / self.sigma2_x[t]) + self.Q.T @ (self.Q / self.sigma2_y[t])
-                Y_hat_variance[t] = self.sigma2_y[t] * np.eye(q) + self.Q @ np.linalg.solve(Omega_inverse_t, self.Q.T)
-            return Y_hat, Y_hat_variance
+                Y_hat_variance[t] = self.Q @ self.Omega[t] @ self.Q.T
+            return Y_hat, np.squeeze(Y_hat_variance)
 
     def predict(self, X, standardize = True, compute_variance = False):
         # Obtain indices of missing observations and impute using EM fit
@@ -684,10 +462,32 @@ class ProbabilisticTFA_StochasticVolatility:
         if standardize:
             X = (X - np.mean(X, axis = 0, where = np.logical_not(X_missing_index))) / np.std(X, axis = 0, where = np.logical_not(X_missing_index))
         
-        # Obtains predicted factors using X only: F_predicted = M (Posterior mean of factors)
-        P_scaled = self.P / self.sigma2_x.mean()
-        Omega_X_inverse = self.V_prior_inv + self.P.T @ P_scaled
-        F_predicted = np.linalg.solve(Omega_X_inverse, P_scaled.T @ X.T).T
+        # Obtains predicted factors and volatilities using X only: F_predicted = M (Posterior mean of factors)
+        h = X.shape[0]
+        k = self.n_components
+        F_predicted = np.zeros([h, k])
+        
+        # Pre-allocate memory for prediction variance if required
+        if compute_variance:
+            q = self.Q.shape[0]
+            Y_hat_variance = np.zeros([h, q, q])
+
+        # Initialize volatility arrays
+        hat_sigma2_x_t = self.ewma_lambda_x * self.sigma2_x[-1] + (1 - self.ewma_lambda_x) * np.mean(self.sigma2_x)
+        hat_sigma2_y_t = self.ewma_lambda_y * self.sigma2_y[-1] + (1 - self.ewma_lambda_y) * np.mean(self.sigma2_y)
+        sigma2_x = np.full(h, hat_sigma2_x_t)
+        sigma2_y = np.full(h, hat_sigma2_y_t)
+
+        # First iteration of factors and volatility using average volatility from training as starting seed
+        for t in range(h):
+            # Factor forecasting using only predictors
+            P_scaled_t = self.P / sigma2_x[t]
+            Omega_X_t = linalg.inv(self.V_prior_inv + self.P.T @ P_scaled_t)
+            F_predicted[t] = X[t] @ P_scaled_t @ Omega_X_t
+
+            # Update variance calculation in the current loop if required
+            if compute_variance:
+                Y_hat_variance[t] = sigma2_y[t] * np.eye(q) + self.Q @ Omega_X_t @ self.Q.T
 
         # PTFA out-of-sample prediction:
         Y_hat = F_predicted @ self.Q.T
@@ -696,39 +496,343 @@ class ProbabilisticTFA_StochasticVolatility:
         if not compute_variance:
             return Y_hat
         else:
-            q = self.Q.shape[0]
-            Y_hat_variance = self.sigma2_y * np.eye(q) + self.Q @ np.linalg.solve(Omega_X_inverse, self.Q.T)
-            return Y_hat, Y_hat_variance
+            return Y_hat, np.squeeze(Y_hat_variance)
 
-class ProbabilisticTFA_DynamicFactors:
-    """    
-    Probabilistic Targeted Factor Analysis (PTFA) with Dynamic Factors
-    This class implements a PTFA model with dynamic factors anduses an Expectation-Maximization (EM) algorithm to fit the model parameters.
+class ProbabilisticTFA_MixedFrequency:
+    """
+    Probabilistic Targeted Factor Analysis (PTFA) with Mixed Frequency class for handling data at different temporal frequencies.
+    
+    This class extends the basic PTFA model to handle mixed frequency data where predictors are observed at high frequency
+    and targets are observed at low frequency. Supports both regular (constant periods) and irregular (variable periods) sampling.
+    
     Attributes:
-        n_components (int): Number of components (factors) in the model.
-        P (np.ndarray):           Factor loadings for predictors.
-        Q (np.ndarray):           Factor loadings for targets.
-        sigma2_x (float):         Variance of the predictors.
-        sigma2_y (float):         Variance of the targets.
-        A (np.ndarray):           Autoregressive coefficients.
-        f0 (np.ndarray):          Initial condition for the factors.
-        factors (np.ndarray):     Predicted factors.
-        V_prior (np.ndarray):     Prior covariance matrix for the factors.
-        V_prior_inv (np.ndarray): Inverse of the prior covariance matrix.
-        max_iter (int):           Maximum number of iterations for the EM algorithm.
-        tolerance (float):        Convergence tolerance for the EM algorithm.
-        r2_array (np.ndarray):    Array of R-squared values across iterations.
+        n_components (int):              Number of components (factors) to estimate.
+        P (np.ndarray):                  Estimated loadings for high-frequency predictors.
+        Q (np.ndarray):                  Estimated loadings for low-frequency targets.
+        sigma2_x (float):                Variance of high-frequency predictors.
+        sigma2_y (float):                Variance of low-frequency targets.
+        factors (np.ndarray):            Estimated factors.
+        V_prior (np.ndarray):            Prior covariance matrix for factors.
+        max_iter (int):                  Maximum number of iterations for the EM algorithm.
+        tolerance (float):               Convergence tolerance for the EM algorithm.
+        periods (int or np.ndarray):     Frequency ratio(s) between high and low frequency data.
+        r2_array (np.ndarray):           Array of R-squared values across iterations if tracking is enabled.
+    
     Methods:
         __init__(self, n_components):
-            Initializes the ProbabilisticTFA_DynamicFactors class with the specified number of components.
+            Initializes the PTFA Mixed Frequency model with the specified number of components.
+        fit(self, X, Y, periods, standardize=True, V_prior=None, track_r2=True, tolerance=1e-6, 
+            max_iter=1000, r2_stop=True, r2_iters=100, rng=None):
+            Fits the PTFA model to mixed frequency data using the EM algorithm.
+            Parameters:
+                X (np.ndarray):            High-frequency predictor data matrix of shape (high_frequency_T, p).
+                Y (np.ndarray):            Low-frequency target data matrix of shape (low_frequency_T, q).
+                periods (int or list):     Frequency ratio (e.g., 3 for quarterly) or list of periods for irregular sampling.
+                standardize (bool):        Whether to standardize the data before fitting.
+                V_prior (np.ndarray):      Prior covariance matrix for factors.
+                track_r2 (bool):           Track R-squared values across iterations.
+                tolerance (float):         Convergence tolerance for the EM algorithm.
+                max_iter (int):            Maximum number of iterations for the EM algorithm.
+                r2_stop (bool):            Whether to stop based on R-squared convergence.
+                r2_iters (int):            Number of iterations to consider for R-squared convergence.
+                rng (np.random.Generator): Random number generator for reproducibility.
+        fitted(self, compute_variance=False):
+            Computes the fitted values for low-frequency targets and optionally the prediction variance.
+            Parameters:
+                compute_variance (bool):   Whether to compute the prediction variance.
+            Returns:
+                np.ndarray:                Predicted low-frequency target values.
+                np.ndarray (optional):     Prediction variance tensor if compute_variance is True.
+        predict(self, X, standardize=True, compute_variance=False):
+            Predicts low-frequency target values using high-frequency predictors.
+            Parameters:
+                X (np.ndarray):            High-frequency predictor data matrix of shape (high_frequency_T, p).
+                standardize (bool):        Whether to standardize the data before predicting.
+                compute_variance (bool):   Whether to compute the prediction variance.
+            Returns:
+                np.ndarray:                Predicted low-frequency target values.
+                np.ndarray (optional):     Prediction variance tensor if compute_variance is True.
+    """
+    def __init__(self, n_components):
+        # Fill in components of the class
+        self.n_components = n_components
+        
+        # Pre-allocate memory for estimates
+        self.P = None
+        self.Q = None
+        self.sigma2_x = None
+        self.sigma2_y = None
+        self.factors = None
+        self.periods = None
+        
+    def fit(self, X, Y, periods, standardize = True, V_prior = None, track_r2 = True,
+            tolerance = 1e-6, max_iter = 1000, r2_stop = True, r2_iters = 25, rng = None):
+        # Obtain sizes
+        # X is assumed inputed as high_frequency_T x p; Y is low_frequency_T x q
+        # periods can be either an integer (e.g. 3 for quarterly) or a list of integers
+        high_frequency_T, p = X.shape
+        low_frequency_T, q = Y.shape
+        k = self.n_components
+        single_period = isinstance(periods, int)
+
+        # Important error check: high_frequency_T must be equal to sum(periods)
+        if single_period:
+            if high_frequency_T != periods:
+                raise ValueError("In single period mode, high_frequency_T must equal periods.")
+        else:
+            if high_frequency_T != sum(periods):
+                raise ValueError("In multi-period mode, high_frequency_T must equal sum(periods).")
+
+        # Fill in components of the class
+        self.max_iter = max_iter
+        self.tolerance = tolerance
+        self.periods = periods if single_period else np.array(periods)
+        if V_prior is None:
+            self.V_prior = np.eye(k)
+        self.V_prior_inv = np.eye(k) if V_prior is None else linalg.inv(V_prior)
+        
+        # Obtain indices of missing observations to create masked objects and initial imputation step
+        if not np.ma.isMaskedArray(X):
+            X_missing_index = np.isnan(X)
+            X_missing_flag = np.any(X_missing_index)
+            if X_missing_flag:
+                X[X_missing_index] = 0.0
+        else:
+            X_missing_index = X.mask
+            X = X.filled(fill_value=0.0)
+        if not np.ma.isMaskedArray(Y):
+            Y_missing_index = np.isnan(Y)
+            Y_missing_flag = np.any(Y_missing_index)
+            if Y_missing_flag:
+                Y[Y_missing_index] = 0.0
+        else:
+            Y_missing_index = Y.mask
+            Y = Y.filled(fill_value=0.0)
+
+        # Center and scale predictors and targets separately
+        if standardize:
+            X = (X - np.mean(X, axis = 0, where = np.logical_not(X_missing_index))) / np.std(X, axis = 0, where = np.logical_not(X_missing_index))
+            Y = (Y - np.mean(Y, axis = 0, where = np.logical_not(Y_missing_index))) / np.std(Y, axis = 0, where = np.logical_not(Y_missing_index))
+        
+        # Initial values for the parameters
+        if rng is None:
+            rng = np.random.default_rng()
+        P0 = rng.normal(size = [p, k])
+        Q0 = rng.normal(size = [q, k])
+        sigma2_x0 = np.var(X, axis = 0).mean()    # Mean variance across features
+        sigma2_y0 = np.var(Y, axis = 0).mean()    # Mean variance across targets
+
+        # Track R-squared of fit if necessary
+        if track_r2 or r2_stop:
+            r2_list = []
+    
+        # Start EM algorithm main loop
+        # Simplify calculations in the case of same frequency ratio for all targets
+        period_indices = range(0, high_frequency_T, self.periods) if single_period else np.cumsum([0] + self.periods[:-1])
+        for it in range(self.max_iter):
+            # Expectation step: Update posterior paramater for factors
+            # Posterior mean and covariance components
+            P_scaled = P0 / sigma2_x0
+            Q_scaled = Q0 / sigma2_y0
+            V_P_inv = linalg.inv(self.V_prior_inv + P0.T @ P_scaled) 
+            V_inv = linalg.inv(self.V_prior_inv + P0.T @ P_scaled + Q0.T @ Q_scaled)
+            
+            # Posterior mean matrix M = E[F | X, Y]
+            X_bar = np.add.reduceat(X, period_indices, axis=0) / (self.periods if single_period else self.periods[:, np.newaxis])
+            X_tilde = X - np.repeat(X_bar, self.periods, axis=0)
+            M_low_frequency = (X_bar @ P_scaled + Y @ Q_scaled) @ V_inv
+            M = X_tilde @ P_scaled @ V_P_inv + np.repeat(M_low_frequency, self.periods, axis=0)
+
+            # Sums over posterior covariance block components
+            M_sum = np.add.reduceat(M, period_indices, axis=0)
+            M_bar = M_sum / (self.periods if single_period else self.periods[:, np.newaxis])
+            V_diagsum = (high_frequency_T - low_frequency_T) * V_P_inv + low_frequency_T * V_inv + M.T @ M
+            V_allsum = low_frequency_T * V_inv + M_sum.T @ M_bar
+
+            # Update missing data using current EM fitted values
+            if X_missing_flag:
+                X_hat = M @ P0.T
+                X[X_missing_index] = X_hat[X_missing_index]
+            if Y_missing_flag:
+                Y_hat = M_bar @ Q0.T
+                Y[Y_missing_index] = Y_hat[Y_missing_index]
+            
+            # Maximization step: Update factor loadings and variances
+            P1 = linalg.solve(V_diagsum, M.T @ X).T
+            Q1 = linalg.solve(V_allsum, M_sum.T @ Y).T
+            Y_periods = Y * (self.periods if single_period else self.periods[:, np.newaxis])
+            sigma2_x1 = (1/(high_frequency_T * p)) * (np.sum(X**2) - np.trace(P1.T @ P1 @ V_diagsum))
+            sigma2_y1 = (1/(low_frequency_T * q)) * (np.sum(Y * Y_periods) - np.trace(Q1.T @ Q1 @ V_allsum))
+            
+            # Compute distance between iterates
+            P_distance = linalg.norm(P1 - P0, "fro")
+            Q_distance = linalg.norm(Q1 - Q0, "fro")
+            sigma_x_distance = np.abs(sigma2_x1 - sigma2_x0)
+            sigma_y_distance = np.abs(sigma2_y1 - sigma2_y0)
+            theta_distance = max([P_distance, Q_distance, sigma_x_distance, sigma_y_distance])
+            
+            # Prediction and tracking of R-squared across iterations
+            if track_r2 or r2_stop:
+                Y_hat = M_bar @ Q1.T
+                r2_values = r2_score(Y, Y_hat, multioutput = "raw_values")
+                r2_list.append(r2_values)
+
+            # Check convergence condition
+            convergence = (theta_distance <= self.tolerance)
+            if r2_stop and it >= r2_iters:
+                # Add stopping condition based on history of R-squared across iterations
+                r2_convergence = np.allclose(np.mean(r2_list[-r2_iters:]),    # Average of previous r_iters values
+                                             np.mean(r2_list[-1]),            # Current value
+                                             self.tolerance)
+                convergence = convergence or r2_convergence
+            if convergence:
+                # Break if distance between each estimate is less than a tolerance
+                break
+            else:
+                # Prepare values for next iteration if convergence not reached
+                P0 = P1
+                Q0 = Q1
+                sigma2_x0 = sigma2_x1
+                sigma2_y0 = sigma2_y1
+        
+        # Update values of the class with results from EM algorithm
+        self.P = P1
+        self.Q = Q1
+        self.sigma2_x = sigma2_x1
+        self.sigma2_y = sigma2_y1
+        self.r2_array = np.asarray(r2_list) if track_r2 else None
+        self.high_frequency_factors = M
+        self.low_frequency_factors = M_bar
+
+    def fitted(self, compute_variance = False):
+        # Variance returned as np.squeeze of final variance object to remove unnecessary dimensions in case of single targets
+        # PTFA prediction in-sample:
+        Y_hat = self.low_frequency_factors @ self.Q.T
+        
+        # Return value depends on whether fitted variance is also required
+        if not compute_variance:
+            return Y_hat
+        else:
+            # Obtain sizes and period flag
+            q = self.Q.shape[0]
+            low_frequency_T = self.low_frequency_factors.shape[0]
+            single_period = isinstance(self.periods, int)
+
+            # Variance of each low-frequency prediction
+            V_PQ = self.V_prior_inv + self.P.T @ (self.P / self.sigma2_x) + self.Q.T @ (self.Q / self.sigma2_y)
+            Y_latent_variance = self.Q @ linalg.solve(V_PQ, self.Q.T)
+            Y_hat_variance = np.tile(Y_latent_variance, [low_frequency_T, q, q]) / (self.periods if single_period else self.periods[:, np.newaxis, np.newaxis])
+            return Y_hat, np.squeeze(Y_hat_variance)
+    
+    def predict(self, X, periods, standardize = True, compute_variance = False):
+        # Obtain necessary sizes and period indices
+        single_period = isinstance(periods, int)
+        if not single_period:
+            periods = np.array(periods)
+        high_frequency_h = X.shape[0]
+        period_indices = range(0, high_frequency_h, periods) if single_period else np.cumsum([0] + periods[:-1])
+
+        # Obtain indices of missing observations and impute using EM fit
+        if not np.ma.isMaskedArray(X):
+            X_missing_index = np.isnan(X)
+            if np.any(X_missing_index):
+                X_hat = self.high_frequency_factors @ self.P.T
+                X[X_missing_index] = X_hat[X_missing_index]
+        else:
+            X_missing_index = X.mask
+            if np.any(X_missing_index):
+                X_hat = self.high_frequency_factors @ self.P.T
+                X = X.filled(X_hat)  
+        
+        # Center and scale predictors if required
+        if standardize:
+            X = (X - np.mean(X, axis = 0, where = np.logical_not(X_missing_index))) / np.std(X, axis = 0, where = np.logical_not(X_missing_index))
+
+        # Obtains predicted factors using X only: F_predicted = M (Posterior mean of factors)
+        P_scaled = self.P / self.sigma2_x
+        V_P = self.V_prior_inv + self.P.T @ P_scaled
+        F_predicted = linalg.solve(V_P, P_scaled.T @ X.T).T
+
+        # PTFA prediction out of sample:
+        F_predicted_sum = np.add.reduceat(F_predicted, period_indices, axis=0)
+        F_predicted_bar = F_predicted_sum / (periods if single_period else periods[:, np.newaxis])
+        Y_hat = F_predicted_bar @ self.Q.T
+
+        # Return value depends on whether fitted variance is also required
+        if not compute_variance:
+            return Y_hat
+        else:
+            # Obtain sizes and period flag
+            q = self.Q.shape[0]
+            low_frequency_h = Y_hat.shape[0]
+
+            # Variance of each low-frequency prediction
+            Y_latent_variance = self.Q @ linalg.solve(V_P, self.Q.T) + self.sigma2_y * np.eye(q)
+            Y_hat_variance = np.tile(Y_latent_variance, [low_frequency_h, q, q]) / (periods if single_period else periods[:, np.newaxis, np.newaxis])
+            return Y_hat, np.squeeze(Y_hat_variance)
+
+class ProbabilisticTFA_DynamicFactors:
+    """
+    Probabilistic Targeted Factor Analysis (PTFA) with Dynamic Factors class for modeling time-dependent latent factors.
+    
+    This class extends the basic PTFA model to include autoregressive dynamics in the latent factors, allowing for
+    temporal dependencies and improved forecasting capabilities. Uses efficient banded matrix operations for scalability.
+    
+    Attributes:
+        n_components (int):              Number of components (factors) to estimate.
+        P (np.ndarray):                  Estimated loadings for predictors.
+        Q (np.ndarray):                  Estimated loadings for targets.
+        sigma2_x (float):                Estimated variance for predictors.
+        sigma2_y (float):                Estimated variance for targets.
+        A (np.ndarray):                  Autoregressive coefficient matrix for factor dynamics.
+        f0 (np.ndarray):                 Initial condition for the factors.
+        factors (np.ndarray):            Predicted factors with temporal dynamics.
+        V_prior (np.ndarray):            Prior covariance matrix for factors.
+        V_prior_inv (np.ndarray):        Inverse of the prior covariance matrix.
+        max_iter (int):                  Maximum number of iterations for the EM algorithm.
+        tolerance (float):               Convergence tolerance for the EM algorithm.
+        r2_array (np.ndarray):           Array of R-squared values across iterations if tracking is enabled.
+    
+    Methods:
+        __init__(self, n_components):
+            Initializes the PTFA Dynamic Factors model with the specified number of components.
         bands_cholesky(self, cholesky_banded, desired_bands=0):
             Computes the inverse elements of a banded matrix using its Cholesky decomposition.
-        fit(self, X, Y, standardize=True, V_prior=None, track_r2=True, tolerance=1e-6, max_iter=1000, r2_stop=True, r2_iters=100, rng=None):
-            Fits the model to the given data using the EM algorithm.
-        fitted(self, standardize=True, prediction_variance=False):
-            Computes the fitted values for the given data.
-        predict(self, X, standardize=True, prediction_variance=False, method="mean"):
-            Predicts the target values for the given predictors.
+            Parameters:
+                cholesky_banded (np.ndarray): Banded Cholesky decomposition matrix.
+                desired_bands (int):          Number of bands to compute (0 for diagonal only).
+            Returns:
+                np.ndarray:                   Banded matrix with inverse elements.
+        fit(self, X, Y, standardize=True, V_prior=None, track_r2=True, tolerance=1e-6, 
+            max_iter=1000, r2_stop=True, r2_iters=100, rng=None):
+            Fits the PTFA model with dynamic factors to the given data using the EM algorithm.
+            Parameters:
+                X (np.ndarray):            Predictor data matrix of shape (T, p).
+                Y (np.ndarray):            Target data matrix of shape (T, q).
+                standardize (bool):        Whether to standardize the data before fitting.
+                V_prior (np.ndarray):      Prior covariance matrix for factors.
+                track_r2 (bool):           Track R-squared values across iterations.
+                tolerance (float):         Convergence tolerance for the EM algorithm.
+                max_iter (int):            Maximum number of iterations for the EM algorithm.
+                r2_stop (bool):            Whether to stop based on R-squared convergence.
+                r2_iters (int):            Number of iterations to consider for R-squared convergence.
+                rng (np.random.Generator): Random number generator for reproducibility.
+        fitted(self, compute_variance=False):
+            Computes the fitted values and optionally the prediction variance.
+            Parameters:
+                compute_variance (bool):   Whether to compute the prediction variance.
+            Returns:
+                np.ndarray:                Predicted target values.
+                np.ndarray (optional):     Prediction variance matrix if compute_variance is True.
+        predict(self, X, standardize=True, compute_variance=False):
+            Predicts target values using the fitted PTFA model with dynamic factors.
+            Parameters:
+                X (np.ndarray):            Predictor data matrix of shape (T, p).
+                standardize (bool):        Whether to standardize the data before predicting.
+                compute_variance (bool):   Whether to compute the prediction variance.
+            Returns:
+                np.ndarray:                Predicted target values.
+                np.ndarray (optional):     Approximated prediction variance matrix if compute_variance is True.
     """
 
     def __init__(self, n_components):
@@ -743,6 +847,7 @@ class ProbabilisticTFA_DynamicFactors:
         self.A = None
         self.f0 = None
         self.factors = None
+        self.Omega = None
 
     def bands_cholesky(self, cholesky_banded, desired_bands=0):
         """
@@ -754,49 +859,53 @@ class ProbabilisticTFA_DynamicFactors:
         Output:
             Omega - (desired_bands * k, T * k) banded matrix with inverse elements
                 As Omega is symmetric, only need to store the lower-diagonal elements in the end
-                Element (i, j) of Omega is located in [maximum_bands + i - j, t*k + r] for l, r in {0, ..., k-1} 
+                Element (i, j) of Omega is located in [desired_bands + i - j, l*k + r] for l, r in {0, ..., k-1} 
         """
         # Pre-allocate final objective using both the upper and lower bands for now
-        half_bandwidth, Tk = cholesky_banded.shape
+        half_bandwidth, Tk = cholesky_banded.shape # Half bandwidth includes main diagonal (l + 1)
         total_rows = 2 * desired_bands + 1
         Omega = np.zeros([total_rows, Tk])
-        
+
         # Transform Cholesky decomposition to LDL' decomposition
         cholesky_diagonal = cholesky_banded[0]                 # Given banded structure, diagonal is first row
         cholesky_banded = cholesky_banded / cholesky_diagonal  # Columns are also in place, so can simply divide to invert
         cholesky_diagonal = 1 / cholesky_diagonal**2
-        
+
         # Main algorithm loop
-        bandwidth_range = range(1, half_bandwidth)
+        max_bandwidth = min(half_bandwidth, desired_bands + 1)
+        bandwidth_range = range(1, max_bandwidth)
         for j in reversed(range(Tk)):
-            for i in reversed(range(max(j - desired_bands - 1, 0), j)):
-                save_row_index = desired_bands + i - j
-                next_row_index = range(min(save_row_index + 1, total_rows - 1),
-                                       min(save_row_index + half_bandwidth, total_rows - 1))
+            for i in reversed(range(max(j - desired_bands, 0), j+1)):
+                save_row_index = desired_bands + i - j  # Omega row index to save current element
+                next_row_index = range(save_row_index + 1, save_row_index + max_bandwidth)
                 Omega[save_row_index, j] = -np.dot(cholesky_banded[bandwidth_range, i], Omega[next_row_index, j])
-                Omega[min(desired_bands + j - i, total_rows - 1), i] = Omega[save_row_index, j]
                 if i == j:
+                    # Update diagonal elements by adding contribution from Cholesky diagonal
                     Omega[save_row_index, i] += cholesky_diagonal[i]
-        
+                else:
+                    # Update symmetric off-diagonal element
+                    Omega[desired_bands + j - i, i] = Omega[save_row_index, j]
+
         # Discard upper set of elements and return
         return Omega[desired_bands:, :]
 
     def fit(self, X, Y, standardize = True, V_prior = None, track_r2 = True,
             tolerance = 1e-6, max_iter = 1000, r2_stop = True, r2_iters = 25, rng = None):
-        # Fill in components of the class
-        self.max_iter = max_iter
-        self.tolerance = tolerance
-        if V_prior is None:
-            self.V_prior = np.eye(k)
-        self.V_prior_inv = np.eye(k) if V_prior is None else np.linalg.inv(V_prior)
-        
         # Obtain sizes
         # X is T x p; Y is T x q; Factors assumed as T x k
         T, p = X.shape
         _, q = Y.shape
         d = p + q
         k = self.n_components
+        Tk = T * k
 
+        # Fill in components of the class
+        self.max_iter = max_iter
+        self.tolerance = tolerance
+        if V_prior is None:
+            self.V_prior = np.eye(k)
+        self.V_prior_inv = np.eye(k) if V_prior is None else linalg.inv(V_prior)
+        
         # Obtain indices of missing observations to create masked objects and initial imputation step
         if not np.ma.isMaskedArray(X):
             X_missing_index = np.isnan(X)
@@ -827,7 +936,7 @@ class ProbabilisticTFA_DynamicFactors:
         L0 = rng.normal(size = [d, k])
         sigma2_x0 = np.var(X, axis = 0).mean()    # Mean variance across features
         sigma2_y0 = np.var(Y, axis = 0).mean()    # Mean variance across targets
-        A0 = np.eye(k)
+        A0 = 0.5 * np.eye(k)
         f0_0 = np.zeros(k)
 
         # Track R-squared of fit if necessary
@@ -835,33 +944,34 @@ class ProbabilisticTFA_DynamicFactors:
             r2_list = []
         
         # Start EM algorithm main loop
-        for i in range(self.max_iter):
+        for it in range(self.max_iter):
             ### Expectation step: Update posterior paramater for factors using sparse matrix computations ---
             L_scaled = np.vstack([L0[:p] / sigma2_x0, L0[p:] / sigma2_y0])
             L_scaled_L = L0.T @ L_scaled
-            Sigma_v_A = - self.V_prior_inv @ A0
-            A_Sigma_v_A = - A0.T @ Sigma_v_A
-            Omega_0_inv = self.V_prior_inv + A_Sigma_v_A + L_scaled_L
-            
+            V_times_A = self.V_prior_inv @ A0
+            A_V_A = A0.T @ V_times_A
+            Omega_0_inv = self.V_prior_inv + L_scaled_L
+
             # Save posterior precision in sparse representation as intermediate
-            main_diagonal = sparse.kron(sparse.eye(T, format='csc'), Omega_0_inv)
-            lower_diagonal = sparse.kron(sparse.eye(T, k=-1, format='csc'), Sigma_v_A)
-            last_block = sparse.lil_matrix((T * k, T * k))  # Create an empty sparse matrix of the same size
-            last_block[(T - 1) * k : T * k, (T - 1) * k : T * k] = self.V_prior_inv + L_scaled_L
-            Omega_inv_sparse = sparse.tril(main_diagonal + lower_diagonal + sparse.csc_array(last_block))
+            sparse_identity = sparse.eye(T, format='csc')
+            main_diagonal = sparse.kron(sparse_identity, Omega_0_inv)
+            lower_diagonal = sparse.kron(sparse.eye(T, k=-1, format='csc'), -V_times_A)
+            sparse_identity[-1, -1] = 0.0   # Remove last element to create last block
+            diagonal_correction = sparse.kron(sparse_identity, A_V_A)
+            Omega_inv_sparse = main_diagonal + lower_diagonal + diagonal_correction
 
             # Save posterior precision to a symmetric banded matrix and compute its Cholesky decomposition
-            # (Tk x Tk) -> (2k x Tk), only storing the 2k lower diagonal bands
-            Omega_inv_cholesky = np.zeros([2 * k, T * k])
+            # (Tk x Tk) -> (2k x Tk), only storing the 2k-1 lower diagonal bands + main diagonal
+            Omega_inv_cholesky = np.zeros([2 * k, Tk])
             for diagonal in range(2 * k):
-                Omega_inv_cholesky[diagonal, :(T * k - diagonal)] = Omega_inv_sparse.diagonal(-diagonal)
+                Omega_inv_cholesky[diagonal, :(Tk - diagonal)] = Omega_inv_sparse.diagonal(-diagonal)
             Omega_inv_cholesky = linalg.cholesky_banded(Omega_inv_cholesky, overwrite_ab=True, lower=True)
                 
             # Compute posterior mean using banded matrix solver
             M = np.ravel(Z @ L_scaled)
-            M[:k] = M[:k] - Sigma_v_A @ f0_0
+            M[:k] += V_times_A @ f0_0
             M = linalg.cho_solve_banded((Omega_inv_cholesky, True), b = M, overwrite_b=True).reshape([T, k])
-            
+
             # If any missing data, update imputation step using current EM fit
             if X_missing_flag:
                 X_hat = M @ L0[:p].T
@@ -874,55 +984,66 @@ class ProbabilisticTFA_DynamicFactors:
 
             ### Maximization step: Update factor loadings and variances ---
             # Calculate banded elements of the posterior covariance using lower-level function
-            Omega_banded = self.bands_cholesky(Omega_inv_cholesky, 3 * k - 1)
+            Omega_banded = self.bands_cholesky(Omega_inv_cholesky, 2 * k - 1)
 
             # Compute sums over block diagonals of the posterior covariance
-            required_blocks = 3    # Diagonal block + two lower diagonal blocks
-            sum_array = np.zeros([required_blocks, k, k])
-            for block in range(required_blocks):
-                for j in range(k):
-                    if block == 0:
-                        # Compute lower-diagonal block of V_0 = sum_{t=1}^{T} Omega_{t, t}
-                        sum_array[0][j:, j] = np.sum(Omega_banded[np.ix_(range(k - j), range(j, T * k, k))], axis = 1)
-                    else:
-                        # Compute Bar_Omega_j = sum_{t=j}^{T-1} Omega_{t - j, t}
-                        row_index = range(block * k - j, (block+1) * k - j)
-                        column_index = range(j, (T - block) * k, k)
-                        sum_array[block][:, j] = np.sum(Omega_banded[np.ix_(row_index, column_index)], axis = 1)
-            sum_array[0][np.triu_indices(k, 1)] = sum_array[0][np.tril_indices(k, -1)]  # Fill-in missing block
+            # All diagonal block, (T-1) diagonal blocks, lower diagonal block
+            sum_array = np.zeros([3, k, k])
+            for j in range(k):
+                # Diagonal block from t = 0 to T-1
+                save_index = range(j, k)
+                row_index = range(k - j)
+                column_index_all = range(j, Tk, k)
+                Omega_blocks = Omega_banded[np.ix_(row_index, column_index_all)]
+                sum_array[0, save_index, j] = np.sum(Omega_blocks, axis = 1)
+
+                # (T-1) diagonal blocks from t = 0 to T-2
+                column_index_withoutlast = range(j, Tk - k, k)
+                Omega_blocks = Omega_banded[np.ix_(row_index, column_index_withoutlast)]
+                sum_array[1, save_index, j] = np.sum(Omega_blocks, axis = 1)
+
+                # Lower diagonal blocks from t = 1 to T-1
+                save_index = range(k)
+                row_index = range(k - j, 2 * k - j)
+                Omega_blocks = Omega_banded[np.ix_(row_index, column_index_withoutlast)]
+                sum_array[2, save_index, j] = np.sum(Omega_blocks, axis = 1)
+            
+            # Fill in missing upper diagonal elements for diagonal blocks
+            for blocks in range(2):
+                sum_array[blocks][np.triu_indices(k, 1)] = sum_array[blocks][np.tril_indices(k, -1)]
 
             # Update loadings and error variances
             V_0 = sum_array[0] + M.T @ M
-            L1 = np.linalg.solve(V_0, M.T @ Z).T
-            P = L1[:p]
-            Q = L1[p:]
-            sigma2_x1 = (1/(T * p)) * (np.sum(X**2) - np.trace(P.T @ P @ V_0))
-            sigma2_y1 = (1/(T * q)) * (np.sum(Y**2) - np.trace(Q.T @ Q @ V_0))
-            
+            L1 = linalg.solve(V_0, M.T @ Z).T
+            P1 = L1[:p]
+            Q1 = L1[p:]
+            sigma2_x1 = (1/(T * p)) * (np.sum(X**2) - np.trace(P1.T @ P1 @ V_0))
+            sigma2_y1 = (1/(T * q)) * (np.sum(Y**2) - np.trace(Q1.T @ Q1 @ V_0))
+
             # Update dynamic parameters: Autoregressive coefficients and initial condition
-            V_1 = sum_array[1] + M[:(T-1)].T @ M[1:]
-            V_2 = sum_array[2] + M[:(T-2)].T @ M[2:]
-            A1 = np.linalg.solve(V_2, V_1)
-            f0_1 = np.linalg.solve(A1.T @ self.V_prior @ A1, A1.T @ self.V_prior @ M[0])
+            V_1 = sum_array[1] + M[:(T-1)].T @ M[:(T-1)]
+            V_2 = sum_array[2] + M[1:].T @ M[:(T-1)]
+            A1 = linalg.solve(V_1, V_2)
+            f0_1 = linalg.solve(A1.T @ self.V_prior @ A1, A1.T @ self.V_prior @ M[0])
 
             # Compute distance between iterates
-            P_distance = np.linalg.norm(P - L0[:p], "fro")
-            Q_distance = np.linalg.norm(Q - L0[p:], "fro")
+            P_distance = linalg.norm(P1 - L0[:p], "fro")
+            Q_distance = linalg.norm(Q1 - L0[p:], "fro")
             sigma_x_distance = np.abs(sigma2_x1 - sigma2_x0)
             sigma_y_distance = np.abs(sigma2_y1 - sigma2_y0)
-            A_distance = np.linalg.norm(A1 - A0, "fro")
-            f0_distance = np.linalg.norm(f0_0 - f0_1, 2)
+            A_distance = linalg.norm(A1 - A0, "fro")
+            f0_distance = linalg.norm(f0_0 - f0_1, 2)
             theta_distance = max([P_distance, Q_distance, sigma_x_distance, sigma_y_distance, A_distance, f0_distance])
             
             # Prediction and tracking of R-squared across iterations
             if track_r2:
-                Y_hat = M @ Q.T
+                Y_hat = M @ Q1.T
                 r2_values = r2_score(Y, Y_hat, multioutput = "raw_values")
                 r2_list.append(r2_values)
 
             # Check convergence condition
             convergence = (theta_distance <= self.tolerance)
-            if r2_stop and i >= r2_iters:
+            if r2_stop and it >= r2_iters:
                 # Add stopping condition based on history of R-squared across iterations
                 r2_convergence = np.allclose(np.mean(r2_list[-r2_iters:]),    # Average of previous r_iters values
                                              np.mean(r2_list[-1]),            # Current value
@@ -940,14 +1061,15 @@ class ProbabilisticTFA_DynamicFactors:
                 f0_0 = f0_1
         
         # Update values of the class with results from EM algorithm
-        self.P = P
-        self.Q = Q
+        self.P = P1
+        self.Q = Q1
         self.sigma2_x = sigma2_x1
         self.sigma2_y = sigma2_y1
         self.A = A1
         self.f0 = f0_1
         self.r2_array = np.asarray(r2_list) if track_r2 else None
         self.factors = M
+        self.Omega = Omega_banded
         
     def fitted(self, compute_variance = False):
         # PTFA prediction in-sample:
@@ -957,10 +1079,20 @@ class ProbabilisticTFA_DynamicFactors:
         if not compute_variance:
             return Y_hat
         else:
+            # Recover components of posterior precision covariance 
+            T = self.factors.shape[0]
             q = self.Q.shape[0]
-            Omega_inverse = self.V_prior_inv + self.P.T @ (self.P / self.sigma2_x) + self.Q.T @ (self.Q / self.sigma2_y)
-            Y_hat_variance = self.sigma2_y * np.eye(q) + self.Q @ np.linalg.solve(Omega_inverse, self.Q.T)
-            return Y_hat, Y_hat_variance
+            k = self.n_components
+            Y_hat_variance = np.zeros([T, q, q])
+            offsets = range(0, -k, -1)
+
+            # Compute variance of each prediction (no covariance between predictions)
+            for t in range(T):
+                # Extract Omega_{t, t} block from banded representation
+                Omega_tt = self.Omega[:k, range(t * k, (t + 1) * k)]
+                Omega_tt = sparse.diags(Omega_tt, offsets, shape=(k, k)).toarray()
+                Y_hat_variance[t] = self.sigma2_y * np.eye(q) + self.Q @ Omega_tt @ self.Q.T
+            return Y_hat, np.squeeze(Y_hat_variance)
 
     def predict(self, X, standardize = True, compute_variance = False):
         # Obtain indices of missing observations and impute using EM fit
@@ -980,31 +1112,42 @@ class ProbabilisticTFA_DynamicFactors:
             X = (X - np.mean(X, axis = 0, where = np.logical_not(X_missing_index))) / np.std(X, axis = 0, where = np.logical_not(X_missing_index))
         
         # Compute some necessary quantities using dynamic information estimates
-        T = X.shape[0]
+        h = X.shape[0]
         k = self.n_components
-        P_scaled_P = (self.P.T @ self.P) / self.sigma2_x
-        Sigma_v_A = - self.V_prior_inv @ self.A
-        A_Sigma_v_A = - self.A.T @ Sigma_v_A
-        Omega_0_inv_X = self.V_prior_inv + A_Sigma_v_A + P_scaled_P
-            
+        Tk = self.factors.shape[0] * k
+        P_scaled =  self.P / self.sigma2_x
+        V_times_A = self.V_prior_inv @ self.A
+        A_V_A = self.A.T @ V_times_A
+        Omega_inv_X = self.V_prior_inv + P_scaled.T @ self.P
+
+        # Recover Omega_{T, T} and M_T final diagonal block for updating one-step ahead forecast
+        Omega_TT = self.Omega[:k, range(Tk-k, Tk)]
+        offsets = range(0, -k, -1)
+        Omega_TT = sparse.diags(Omega_TT, offsets, shape=(k, k)).toarray()
+        Omega_correction = linalg.inv(self.A @ Omega_TT @ self.A.T + self.V_prior)
+        M_T = self.factors[-1]
+
         # Save posterior precision in sparse representation as intermediate
-        main_diagonal = sparse.kron(sparse.eye(T, format='csc'), Omega_0_inv_X)
-        lower_diagonal = sparse.kron(sparse.eye(T, k=-1, format='csc'), Sigma_v_A)
-        last_block = sparse.lil_matrix((T * k, T * k))  # Create an empty sparse matrix of the same size
-        last_block[(T - 1) * k : T * k, (T - 1) * k : T * k] = self.V_prior_inv + P_scaled_P
-        Omega_inv_sparse = sparse.tril(main_diagonal + lower_diagonal + sparse.csc_array(last_block))
+        sparse_identity = sparse.eye(h, format='lil')
+        main_diagonal = sparse.kron(sparse_identity, Omega_inv_X)
+        lower_diagonal = sparse.kron(sparse.eye(h, k=-1, format='csc'), -V_times_A)
+        sparse_identity[-1, -1] = 0.0   # Remove last element to create last block
+        diagonal_correction = sparse.kron(sparse_identity, A_V_A)
+        sparse_identity[1:, 1:] = 0.0   # Keep only first block for final correction
+        first_block_correction = sparse.kron(sparse_identity, Omega_correction - self.V_prior_inv)
+        Omega_inv_sparse = main_diagonal + lower_diagonal + diagonal_correction + first_block_correction
 
         # Save posterior precision to a symmetric banded matrix and compute its Cholesky decomposition
         # (Tk x Tk) -> (2k x Tk), only storing the 2k lower diagonal bands
-        Omega_inv_cholesky = np.zeros([2 * k, T * k])
+        Omega_inv_cholesky = np.zeros([2 * k, h * k])
         for diagonal in range(2 * k):
-            Omega_inv_cholesky[diagonal, :(T * k - diagonal)] = Omega_inv_sparse.diagonal(-diagonal)
+            Omega_inv_cholesky[diagonal, :(h * k - diagonal)] = Omega_inv_sparse.diagonal(-diagonal)
         Omega_inv_cholesky = linalg.cholesky_banded(Omega_inv_cholesky, overwrite_ab=True, lower=True)
                 
         # Compute predicted factors using banded matrix solver
-        F_predicted = np.ravel(X @ self.P / self.sigma2_x)
-        F_predicted[:k] = F_predicted[:k] - Sigma_v_A @ self.f0
-        F_predicted = linalg.cho_solve_banded((Omega_inv_cholesky, True), b = F_predicted, overwrite_b=True).reshape([T, k])
+        F_predicted = np.ravel(X @ P_scaled)
+        F_predicted[:k] += Omega_correction @ self.A @ M_T
+        F_predicted = linalg.cho_solve_banded((Omega_inv_cholesky, True), b = F_predicted, overwrite_b=True).reshape([h, k])
 
         # PTFA out-of-sample prediction:
         Y_hat = F_predicted @ self.Q.T
@@ -1013,57 +1156,70 @@ class ProbabilisticTFA_DynamicFactors:
         if not compute_variance:
             return Y_hat
         else:
-            # Approximated PTFA out-of-sample prediction variance
+            # Calculate diagnal blocks of from posterior covariance using lower-level function
+            Omega_X_banded = self.bands_cholesky(Omega_inv_cholesky, k - 1)
+
+            # Compute variance of each prediction (no covariance between predictions)
             q = self.Q.shape[0]
-            Y_hat_variance = self.sigma2_y * np.eye(q) + self.Q @ np.linalg.solve(Omega_0_inv_X, self.Q.T)
-            return Y_hat, Y_hat_variance
+            Y_hat_variance = np.zeros([h, q, q])
+            for t in range(h):
+                # Extract Omega_{t, t} block from banded representation
+                Omega_X_tt = Omega_X_banded[:k, range(t * k, (t + 1) * k)]
+                Omega_X_tt = sparse.diags(Omega_X_tt, offsets, shape=(k, k)).toarray()
+                Y_hat_variance[t] = self.sigma2_y * np.eye(q) + self.Q @ Omega_X_tt @ self.Q.T
+            return Y_hat, np.squeeze(Y_hat_variance)
         
 
 # Method for comparison
 class ProbabilisticPCA:
     """
-    Probabilistic Principal Component Analysis (PPCA) class for fitting and predicting using a probabilistic model.
-    Implementation follows original paper Tipping and Bishop (1999, JRSS-B)
+    Probabilistic Principal Component Analysis (PPCA) class for dimensionality reduction using a probabilistic model.
+    
+    Implementation follows the original paper by Tipping and Bishop (1999, JRSS-B). This class provides a probabilistic
+    approach to PCA that can handle missing data and provides uncertainty estimates, comparable to all PTFA classes.
+    
     Attributes:
         n_components (int):              Number of components (factors) to estimate.
-        L (np.ndarray):                  Estimated loadings.
-        sigma2 (float):                  Estimated variance.
-        factors (np.ndarray):            Predicted factors.
+        L (np.ndarray):                  Estimated loadings matrix.
+        sigma2 (float):                  Estimated isotropic noise variance.
+        factors (np.ndarray):            Predicted factors (latent variables).
         V_prior (np.ndarray):            Prior covariance matrix for factors.
         max_iter (int):                  Maximum number of iterations for the EM algorithm.
         tolerance (float):               Convergence tolerance for the EM algorithm.
         r2_array (np.ndarray):           Array of R-squared values across iterations if tracking is enabled.
+    
     Methods:
         __init__(self, n_components):
             Initializes the PPCA model with the specified number of components.
-        fit(self, X, Y, standardize=True, V_prior=None, track_r2=True, tolerance=1e-6, max_iter=1000, r2_stop=True, r2_iters=100):
+        fit(self, X, standardize=True, V_prior=None, track_r2=True, tolerance=1e-6, 
+            max_iter=1000, r2_stop=False, r2_iters=25, rng=None):
             Fits the PPCA model to the given data using the EM algorithm.
             Parameters:
-                X (np.ndarray):           Predictor data matrix of shape (T, d).
-                standardize (bool):       Whether to standardize the data before fitting.
-                V_prior (np.ndarray):     Prior covariance matrix for factors.
-                track_r2 (bool):          track R-squared values across iterations.
-                tolerance (float):        Convergence tolerance for the EM algorithm.
-                max_iter (int):           Maximum number of iterations for the EM algorithm.
-                r2_stop (bool):           Whether to stop based on R-squared convergence.
-                r2_iters (int):           Number of iterations to consider for R-squared convergence.
-                rng (np.random.Generator): Random number generator for reproducibility (as in np.random.default_rng()).
-        fitted(self, standardize=True, compute_variance=False):
-            Computes the fitted values and optionally the prediction variance.
+                X (np.ndarray):            Data matrix of shape (T, d).
+                standardize (bool):        Whether to standardize the data before fitting.
+                V_prior (np.ndarray):      Prior covariance matrix for factors.
+                track_r2 (bool):           Track R-squared values across iterations.
+                tolerance (float):         Convergence tolerance for the EM algorithm.
+                max_iter (int):            Maximum number of iterations for the EM algorithm.
+                r2_stop (bool):            Whether to stop based on R-squared convergence.
+                r2_iters (int):            Number of iterations to consider for R-squared convergence.
+                rng (np.random.Generator): Random number generator for reproducibility.
+        fitted(self, compute_variance=False):
+            Computes the fitted (reconstructed) values and optionally the prediction variance.
             Parameters:
-                compute_variance (bool): Whether to compute the prediction variance.
+                compute_variance (bool):   Whether to compute the reconstruction variance.
             Returns:
-                np.ndarray:              Predicted target values.
-                np.ndarray (optional):   Prediction variance matrix if compute_variance is True.
+                np.ndarray:                Reconstructed data values.
+                np.ndarray (optional):     Reconstruction variance matrix if compute_variance is True.
         predict(self, X, standardize=True, compute_variance=False):
-            Predicts target values using the fitted PPCA model.
+            Reconstructs data using the fitted PPCA model (for out-of-sample data).
             Parameters:
-                X (np.ndarray):          Predictor data matrix of shape (T, d).
-                standardize (bool):      Whether to standardize the data before predicting.
-                compute_variance (bool): Whether to compute the prediction variance.
+                X (np.ndarray):            Data matrix of shape (T, d) to reconstruct.
+                standardize (bool):        Whether to standardize the data before reconstructing.
+                compute_variance (bool):   Whether to compute the reconstruction variance.
             Returns:
-                np.ndarray: Predicted target values.
-                np.ndarray (optional):  Prediction variance matrix if compute_variance is True.
+                np.ndarray:                Reconstructed data values.
+                np.ndarray (optional):     Reconstruction variance matrix if compute_variance is True.
     """
     def __init__(self, n_components):
         # Fill in components of the class
@@ -1076,17 +1232,17 @@ class ProbabilisticPCA:
 
     def fit(self, X, standardize = True, V_prior = None, track_r2 = True,
             tolerance = 1e-6, max_iter = 1000, r2_stop = False, r2_iters = 25, rng = None):
+        # Obtain sizes
+        # X is T x d; Factors assumed as T x k
+        T, d = X.shape
+        k = self.n_components
+        
         # Fill in components of the class controlling algorithm
         self.max_iter = max_iter
         self.tolerance = tolerance
         if V_prior is None:
             self.V_prior = np.eye(k)
-        self.V_prior_inv = np.eye(k) if V_prior is None else np.linalg.inv(V_prior)
-        
-        # Obtain sizes and missing indices
-        # X is T x d; Factors assumed as T x k
-        T, d = X.shape
-        k = self.n_components
+        self.V_prior_inv = np.eye(k) if V_prior is None else linalg.inv(V_prior)
         
         # Obtain indices of missing observations to create masked objects and initial imputation step
         if not np.ma.isMaskedArray(X):
@@ -1113,10 +1269,10 @@ class ProbabilisticPCA:
             r2_list = []
         
         # Start EM algorithm main loop
-        for i in range(self.max_iter):
+        for it in range(self.max_iter):
             # Expectation step: Update posterior paramater for factors
             L_scaled = L0 / sigma2_0
-            Omega = np.linalg.inv(self.V_prior_inv + L0.T @ L_scaled)
+            Omega = linalg.inv(self.V_prior_inv + L0.T @ L_scaled)
             M = X @ L_scaled @ Omega
 
             # If any missing data, update imputation step using current EM fit
@@ -1126,11 +1282,11 @@ class ProbabilisticPCA:
 
             # Maximization step: Update factor loadings and variances
             V = T * Omega + M.T @ M
-            L1 = np.linalg.solve(V, M.T @ X).T
+            L1 = linalg.solve(V, M.T @ X).T
             sigma2_1 = (1/(T * d)) * (np.sum(X**2) - np.trace(L1.T @ L1 @ V))
             
             # Compute distance between iterates
-            L_distance = np.linalg.norm(L1 - L0, "fro")
+            L_distance = linalg.norm(L1 - L0, "fro")
             sigma_x_distance = np.abs(sigma2_1 - sigma2_0)
             theta_distance = max([L_distance, sigma_x_distance])
 
@@ -1143,7 +1299,7 @@ class ProbabilisticPCA:
 
             # Check convergence condition
             convergence = (theta_distance <= self.tolerance)
-            if r2_stop and i >= r2_iters:
+            if r2_stop and it >= r2_iters:
                 # Add stopping condition based on history of R-squared across iterations
                 r2_convergence = np.allclose(np.mean(r2_list[-r2_iters:]),    # Average of previous r_iters values
                                              np.mean(r2_list[-1]),            # Current value
@@ -1171,9 +1327,8 @@ class ProbabilisticPCA:
         if not compute_variance:
             return X_hat
         else:
-            d = self.L.shape[0]
             Omega_inverse = self.V_prior_inv + self.L.T @ (self.L / self.sigma2)
-            X_hat_variance = self.sigma2 * np.eye(d) + self.L @ np.linalg.solve(Omega_inverse, self.L.T)
+            X_hat_variance = self.L @ linalg.solve(Omega_inverse, self.L.T)
             return X_hat, X_hat_variance
 
     def predict(self, X, standardize = True, compute_variance = False):
@@ -1196,7 +1351,7 @@ class ProbabilisticPCA:
         # Obtains predicted factors using X only: F_predicted = M (Posterior mean of factors)
         L_scaled = self.L / self.sigma2
         Omega_X_inverse = self.V_prior_inv + self.L.T @ L_scaled
-        F_predicted = np.linalg.solve(Omega_X_inverse, L_scaled.T @ X.T).T
+        F_predicted = linalg.solve(Omega_X_inverse, L_scaled.T @ X.T).T
 
         # PTFA out-of-sample prediction:
         X_hat = F_predicted @ self.Q.T
@@ -1206,5 +1361,5 @@ class ProbabilisticPCA:
             return X_hat
         else:
             d = self.L.shape[0]
-            X_hat_variance = self.sigma2 * np.eye(d) + self.L @ np.linalg.solve(Omega_X_inverse, self.L.T)
+            X_hat_variance = self.sigma2 * np.eye(d) + self.L @ linalg.solve(Omega_X_inverse, self.L.T)
             return X_hat, X_hat_variance
