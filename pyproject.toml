@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 # Package metadata
 [project]
 name = "ptfa"
-version = "0.4.0"
+version = "0.4.6"
 description = "Probabilistic Targeted Factor Analysis"
 dynamic = ["readme"]
 authors = [

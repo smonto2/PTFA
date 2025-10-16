@@ -68,6 +68,10 @@ class ProbabilisticTFA:
         _, q = Y.shape
         d = p + q
         k = self.n_components
+
+        # Main error check on dimensions: small-dimensional problem requires T > d + k and d > k
+        if T <= d + k:
+            raise ValueError("PTFA requires enough observations and features:\nsample_size > n_predictors + n_targets + n_components and n_predictors + n_targets > n_components.")
         
         # Fill in components of the class controlling algorithm
         self.max_iter = max_iter
@@ -84,6 +88,7 @@ class ProbabilisticTFA:
                 X[X_missing_index] = 0.0
         else:
             X_missing_index = X.mask
+            X_missing_flag = True
             X = X.filled(fill_value=0.0)
         if not np.ma.isMaskedArray(Y):
             Y_missing_index = np.isnan(Y)
@@ -92,6 +97,7 @@ class ProbabilisticTFA:
                 Y[Y_missing_index] = 0.0
         else:
             Y_missing_index = Y.mask
+            Y_missing_flag = True
             Y = Y.filled(fill_value=0.0)
 
         # Center and scale predictors and targets separately before stacking
@@ -205,9 +211,10 @@ class ProbabilisticTFA:
                 X = X.filled(X_hat)            
         
         # Center and scale predictors if required
-        if standardize:
+        h = X.shape[0]
+        if standardize and h > 1:
             X = (X - np.mean(X, axis = 0, where = np.logical_not(X_missing_index))) / np.std(X, axis = 0, where = np.logical_not(X_missing_index))
-                
+
         # Obtains predicted factors using X only: F_predicted = M (Posterior mean of factors)
         P_scaled = self.P / self.sigma2_x
         Omega_X_inverse = self.V_prior_inv + self.P.T @ P_scaled
@@ -303,6 +310,10 @@ class ProbabilisticTFA_StochasticVolatility:
         d = p + q
         k = self.n_components
 
+        # Main error check on dimensions: small-dimensional problem requires T > d + k and d > k
+        if T <= d + k:
+            raise ValueError("PTFA requires enough observations and features:\nsample_size > n_predictors + n_targets + n_components and n_predictors + n_targets > n_components.")
+
         # Fill in components of the class
         self.max_iter = max_iter
         self.tolerance = tolerance          # EM stopping tolerance
@@ -322,6 +333,7 @@ class ProbabilisticTFA_StochasticVolatility:
                 X[X_missing_index] = 0.0
         else:
             X_missing_index = X.mask
+            X_missing_flag = True
             X = X.filled(fill_value=0.0)
         if not np.ma.isMaskedArray(Y):
             Y_missing_index = np.isnan(Y)
@@ -330,6 +342,7 @@ class ProbabilisticTFA_StochasticVolatility:
                 Y[Y_missing_index] = 0.0
         else:
             Y_missing_index = Y.mask
+            Y_missing_flag = True
             Y = Y.filled(fill_value=0.0)
 
         # Center and scale predictors and targets separately before stacking
@@ -459,35 +472,22 @@ class ProbabilisticTFA_StochasticVolatility:
                 X = X.filled(X_hat)            
         
         # Center and scale predictors if required
-        if standardize:
+        h = X.shape[0]
+        if standardize and h > 1:
             X = (X - np.mean(X, axis = 0, where = np.logical_not(X_missing_index))) / np.std(X, axis = 0, where = np.logical_not(X_missing_index))
         
         # Obtains predicted factors and volatilities using X only: F_predicted = M (Posterior mean of factors)
-        h = X.shape[0]
         k = self.n_components
         F_predicted = np.zeros([h, k])
         
-        # Pre-allocate memory for prediction variance if required
-        if compute_variance:
-            q = self.Q.shape[0]
-            Y_hat_variance = np.zeros([h, q, q])
-
         # Initialize volatility arrays
         hat_sigma2_x_t = self.ewma_lambda_x * self.sigma2_x[-1] + (1 - self.ewma_lambda_x) * np.mean(self.sigma2_x)
         hat_sigma2_y_t = self.ewma_lambda_y * self.sigma2_y[-1] + (1 - self.ewma_lambda_y) * np.mean(self.sigma2_y)
-        sigma2_x = np.full(h, hat_sigma2_x_t)
-        sigma2_y = np.full(h, hat_sigma2_y_t)
 
-        # First iteration of factors and volatility using average volatility from training as starting seed
-        for t in range(h):
-            # Factor forecasting using only predictors
-            P_scaled_t = self.P / sigma2_x[t]
-            Omega_X_t = linalg.inv(self.V_prior_inv + self.P.T @ P_scaled_t)
-            F_predicted[t] = X[t] @ P_scaled_t @ Omega_X_t
-
-            # Update variance calculation in the current loop if required
-            if compute_variance:
-                Y_hat_variance[t] = sigma2_y[t] * np.eye(q) + self.Q @ Omega_X_t @ self.Q.T
+        # Update factors and volatilities using common estimate
+        P_scaled_t = self.P / hat_sigma2_x_t
+        Omega_X_t = linalg.inv(self.V_prior_inv + self.P.T @ P_scaled_t)
+        F_predicted = X @ P_scaled_t @ Omega_X_t
 
         # PTFA out-of-sample prediction:
         Y_hat = F_predicted @ self.Q.T
@@ -496,6 +496,9 @@ class ProbabilisticTFA_StochasticVolatility:
         if not compute_variance:
             return Y_hat
         else:
+            # Update variance calculation
+            q = self.Q.shape[0]
+            Y_hat_variance = hat_sigma2_y_t * np.eye(q) + self.Q @ Omega_X_t @ self.Q.T
             return Y_hat, np.squeeze(Y_hat_variance)
 
 class ProbabilisticTFA_MixedFrequency:
@@ -573,15 +576,16 @@ class ProbabilisticTFA_MixedFrequency:
         high_frequency_T, p = X.shape
         low_frequency_T, q = Y.shape
         k = self.n_components
+        d = p + q
         single_period = isinstance(periods, int)
 
-        # Important error check: high_frequency_T must be equal to sum(periods)
-        if single_period:
-            if high_frequency_T != periods:
-                raise ValueError("In single period mode, high_frequency_T must equal periods.")
-        else:
-            if high_frequency_T != sum(periods):
-                raise ValueError("In multi-period mode, high_frequency_T must equal sum(periods).")
+        # Main error check on dimensions: small-dimensional problem requires T > d + k and d > k
+        if low_frequency_T <= q + k or high_frequency_T <= p + k:
+            raise ValueError("PTFA requires enough observations and features:\nsample_size > n_predictors + n_targets + n_components and n_predictors + n_targets > n_components.")
+
+        # Mixed-frequency edge case: high_frequency_T must be equal to sum(periods) if periods is a list
+        if not single_period and high_frequency_T != sum(periods):
+                raise ValueError("If periods is a list of integers, high_frequency_T must equal sum(periods).")
 
         # Fill in components of the class
         self.max_iter = max_iter
@@ -599,6 +603,7 @@ class ProbabilisticTFA_MixedFrequency:
                 X[X_missing_index] = 0.0
         else:
             X_missing_index = X.mask
+            X_missing_flag = True
             X = X.filled(fill_value=0.0)
         if not np.ma.isMaskedArray(Y):
             Y_missing_index = np.isnan(Y)
@@ -607,6 +612,7 @@ class ProbabilisticTFA_MixedFrequency:
                 Y[Y_missing_index] = 0.0
         else:
             Y_missing_index = Y.mask
+            Y_missing_flag = True
             Y = Y.filled(fill_value=0.0)
 
         # Center and scale predictors and targets separately
@@ -721,7 +727,10 @@ class ProbabilisticTFA_MixedFrequency:
             # Variance of each low-frequency prediction
             V_PQ = self.V_prior_inv + self.P.T @ (self.P / self.sigma2_x) + self.Q.T @ (self.Q / self.sigma2_y)
             Y_latent_variance = self.Q @ linalg.solve(V_PQ, self.Q.T)
-            Y_hat_variance = np.tile(Y_latent_variance, [low_frequency_T, q, q]) / (self.periods if single_period else self.periods[:, np.newaxis, np.newaxis])
+            if single_period:
+                Y_hat_variance = Y_latent_variance / self.periods
+            else:
+                Y_hat_variance = np.tile(Y_latent_variance, [low_frequency_T, q, q]) / self.periods[:, np.newaxis, np.newaxis]
             return Y_hat, np.squeeze(Y_hat_variance)
     
     def predict(self, X, periods, standardize = True, compute_variance = False):
@@ -745,7 +754,8 @@ class ProbabilisticTFA_MixedFrequency:
                 X = X.filled(X_hat)  
         
         # Center and scale predictors if required
-        if standardize:
+        h = X.shape[0]
+        if standardize and h > 1:
             X = (X - np.mean(X, axis = 0, where = np.logical_not(X_missing_index))) / np.std(X, axis = 0, where = np.logical_not(X_missing_index))
 
         # Obtains predicted factors using X only: F_predicted = M (Posterior mean of factors)
@@ -768,7 +778,10 @@ class ProbabilisticTFA_MixedFrequency:
 
             # Variance of each low-frequency prediction
             Y_latent_variance = self.Q @ linalg.solve(V_P, self.Q.T) + self.sigma2_y * np.eye(q)
-            Y_hat_variance = np.tile(Y_latent_variance, [low_frequency_h, q, q]) / (periods if single_period else periods[:, np.newaxis, np.newaxis])
+            if single_period:
+                Y_hat_variance = Y_latent_variance / periods
+            else:
+                Y_hat_variance = np.tile(Y_latent_variance, [low_frequency_h, q, q]) / periods[:, np.newaxis, np.newaxis]
             return Y_hat, np.squeeze(Y_hat_variance)
 
 class ProbabilisticTFA_DynamicFactors:
@@ -899,6 +912,10 @@ class ProbabilisticTFA_DynamicFactors:
         k = self.n_components
         Tk = T * k
 
+        # Main error check on dimensions: small-dimensional problem requires T > d + k and d > k
+        if T <= d + k:
+            raise ValueError("PTFA requires enough observations and features:\nsample_size > n_predictors + n_targets + n_components and n_predictors + n_targets > n_components.")
+
         # Fill in components of the class
         self.max_iter = max_iter
         self.tolerance = tolerance
@@ -914,6 +931,7 @@ class ProbabilisticTFA_DynamicFactors:
                 X[X_missing_index] = 0.0
         else:
             X_missing_index = X.mask
+            X_missing_flag = True
             X = X.filled(fill_value=0.0)
         if not np.ma.isMaskedArray(Y):
             Y_missing_index = np.isnan(Y)
@@ -922,6 +940,7 @@ class ProbabilisticTFA_DynamicFactors:
                 Y[Y_missing_index] = 0.0
         else:
             Y_missing_index = Y.mask
+            Y_missing_flag = True
             Y = Y.filled(fill_value=0.0)
 
         # Center and scale predictors and targets separately before stacking
@@ -1091,7 +1110,7 @@ class ProbabilisticTFA_DynamicFactors:
                 # Extract Omega_{t, t} block from banded representation
                 Omega_tt = self.Omega[:k, range(t * k, (t + 1) * k)]
                 Omega_tt = sparse.diags(Omega_tt, offsets, shape=(k, k)).toarray()
-                Y_hat_variance[t] = self.sigma2_y * np.eye(q) + self.Q @ Omega_tt @ self.Q.T
+                Y_hat_variance[t] = self.Q @ Omega_tt @ self.Q.T
             return Y_hat, np.squeeze(Y_hat_variance)
 
     def predict(self, X, standardize = True, compute_variance = False):
@@ -1108,11 +1127,11 @@ class ProbabilisticTFA_DynamicFactors:
                 X = X.filled(X_hat)            
         
         # Center and scale predictors if required
-        if standardize:
+        h = X.shape[0]
+        if standardize and h > 1:
             X = (X - np.mean(X, axis = 0, where = np.logical_not(X_missing_index))) / np.std(X, axis = 0, where = np.logical_not(X_missing_index))
         
         # Compute some necessary quantities using dynamic information estimates
-        h = X.shape[0]
         k = self.n_components
         Tk = self.factors.shape[0] * k
         P_scaled =  self.P / self.sigma2_x
@@ -1236,6 +1255,10 @@ class ProbabilisticPCA:
         # X is T x d; Factors assumed as T x k
         T, d = X.shape
         k = self.n_components
+
+        # Main error check on dimensions: small-dimensional problem requires T > d + k and d > k
+        if T <= d + k:
+            raise ValueError("PPCA requires enough observations and features:\nsample_size > n_predictors + n_components and n_predictors > n_components.")
         
         # Fill in components of the class controlling algorithm
         self.max_iter = max_iter
@@ -1252,6 +1275,7 @@ class ProbabilisticPCA:
                 X[X_missing_index] = 0.0
         else:
             X_missing_index = X.mask
+            X_missing_flag = True
             X = X.filled(fill_value=0.0)
 
         # Center and scale predictors and targets separately before stacking
@@ -1345,9 +1369,10 @@ class ProbabilisticPCA:
                 X = X.filled(X_hat)            
         
         # Center and scale predictors if required
-        if standardize:
+        h = X.shape[0]
+        if standardize and h > 1:
             X = (X - np.mean(X, axis = 0, where = np.logical_not(X_missing_index))) / np.std(X, axis = 0, where = np.logical_not(X_missing_index))
-                
+
         # Obtains predicted factors using X only: F_predicted = M (Posterior mean of factors)
         L_scaled = self.L / self.sigma2
         Omega_X_inverse = self.V_prior_inv + self.L.T @ L_scaled
