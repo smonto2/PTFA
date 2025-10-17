@@ -456,7 +456,7 @@ class ProbabilisticTFA_StochasticVolatility:
             Y_hat_variance = np.zeros([T, q, q])
             for t in range(T):
                 Y_hat_variance[t] = self.Q @ self.Omega[t] @ self.Q.T
-            return Y_hat, np.squeeze(Y_hat_variance)
+            return Y_hat, Y_hat_variance
 
     def predict(self, X, standardize = True, compute_variance = False):
         # Obtain indices of missing observations and impute using EM fit
@@ -499,7 +499,7 @@ class ProbabilisticTFA_StochasticVolatility:
             # Update variance calculation
             q = self.Q.shape[0]
             Y_hat_variance = hat_sigma2_y_t * np.eye(q) + self.Q @ Omega_X_t @ self.Q.T
-            return Y_hat, np.squeeze(Y_hat_variance)
+            return Y_hat, Y_hat_variance
 
 class ProbabilisticTFA_MixedFrequency:
     """
@@ -711,7 +711,6 @@ class ProbabilisticTFA_MixedFrequency:
         self.low_frequency_factors = M_bar
 
     def fitted(self, compute_variance = False):
-        # Variance returned as np.squeeze of final variance object to remove unnecessary dimensions in case of single targets
         # PTFA prediction in-sample:
         Y_hat = self.low_frequency_factors @ self.Q.T
         
@@ -731,7 +730,7 @@ class ProbabilisticTFA_MixedFrequency:
                 Y_hat_variance = Y_latent_variance / self.periods
             else:
                 Y_hat_variance = np.tile(Y_latent_variance, [low_frequency_T, q, q]) / self.periods[:, np.newaxis, np.newaxis]
-            return Y_hat, np.squeeze(Y_hat_variance)
+            return Y_hat, Y_hat_variance
     
     def predict(self, X, periods, standardize = True, compute_variance = False):
         # Obtain necessary sizes and period indices
@@ -782,7 +781,7 @@ class ProbabilisticTFA_MixedFrequency:
                 Y_hat_variance = Y_latent_variance / periods
             else:
                 Y_hat_variance = np.tile(Y_latent_variance, [low_frequency_h, q, q]) / periods[:, np.newaxis, np.newaxis]
-            return Y_hat, np.squeeze(Y_hat_variance)
+            return Y_hat, Y_hat_variance
 
 class ProbabilisticTFA_DynamicFactors:
     """
@@ -1111,7 +1110,7 @@ class ProbabilisticTFA_DynamicFactors:
                 Omega_tt = self.Omega[:k, range(t * k, (t + 1) * k)]
                 Omega_tt = sparse.diags(Omega_tt, offsets, shape=(k, k)).toarray()
                 Y_hat_variance[t] = self.Q @ Omega_tt @ self.Q.T
-            return Y_hat, np.squeeze(Y_hat_variance)
+            return Y_hat, Y_hat_variance
 
     def predict(self, X, standardize = True, compute_variance = False):
         # Obtain indices of missing observations and impute using EM fit
@@ -1186,7 +1185,7 @@ class ProbabilisticTFA_DynamicFactors:
                 Omega_X_tt = Omega_X_banded[:k, range(t * k, (t + 1) * k)]
                 Omega_X_tt = sparse.diags(Omega_X_tt, offsets, shape=(k, k)).toarray()
                 Y_hat_variance[t] = self.sigma2_y * np.eye(q) + self.Q @ Omega_X_tt @ self.Q.T
-            return Y_hat, np.squeeze(Y_hat_variance)
+            return Y_hat, Y_hat_variance
         
 
 # Method for comparison
