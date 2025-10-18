@@ -41,11 +41,10 @@ class ProbabilisticTFA:
             Returns:
                 np.ndarray:              Predicted target values.
                 np.ndarray (optional):   Prediction variance matrix if compute_variance is True.
-        predict(self, X, standardize=True, compute_variance=False):
+        predict(self, X, compute_variance=False):
             Predicts target values using the fitted PTFA model.
             Parameters:
                 X (np.ndarray):          Predictor data matrix of shape (T, p).
-                standardize (bool):      Whether to standardize the data before predicting.
                 compute_variance (bool): Whether to compute the prediction variance.
             Returns:
                 np.ndarray: Predicted target values.
@@ -56,6 +55,10 @@ class ProbabilisticTFA:
         self.n_components = n_components
                 
         # Pre-allocate memory for estimates
+        self.X_mean = None
+        self.X_std = None
+        self.Y_mean = None
+        self.Y_std = None
         self.P = None
         self.sigma2 = None
         self.factors = None
@@ -76,6 +79,7 @@ class ProbabilisticTFA:
         # Fill in components of the class controlling algorithm
         self.max_iter = max_iter
         self.tolerance = tolerance
+        self.standardize = standardize
         if V_prior is None:
             self.V_prior = np.eye(k)
         self.V_prior_inv = np.eye(k) if V_prior is None else linalg.inv(V_prior)
@@ -101,17 +105,21 @@ class ProbabilisticTFA:
             Y = Y.filled(fill_value=0.0)
 
         # Center and scale predictors and targets separately before stacking
-        if standardize:
-            X = (X - np.mean(X, axis = 0, where = np.logical_not(X_missing_index))) / np.std(X, axis = 0, where = np.logical_not(X_missing_index))
-            Y = (Y - np.mean(Y, axis = 0, where = np.logical_not(Y_missing_index))) / np.std(Y, axis = 0, where = np.logical_not(Y_missing_index))
+        X_mean = np.mean(X, axis=0, where=np.logical_not(X_missing_index))
+        X_std = np.std(X, axis=0, where=np.logical_not(X_missing_index))
+        Y_mean = np.mean(Y, axis=0, where=np.logical_not(Y_missing_index))
+        Y_std = np.std(Y, axis=0, where=np.logical_not(Y_missing_index))
+        if self.standardize:
+            X = (X - X_mean) / X_std
+            Y = (Y - Y_mean) / Y_std
         Z = np.hstack([X, Y])
         
         # Initial values for the parameters
         if rng is None:
             rng = np.random.default_rng()
         L0 = rng.normal(size = [d, k])
-        sigma2_x0 = X.var(axis = 0).mean()    # Mean variance across features
-        sigma2_y0 = Y.var(axis = 0).mean()    # Mean variance across targets
+        sigma2_x0 = np.mean(X_std**2)    # Mean variance across features
+        sigma2_y0 = np.mean(Y_std**2)    # Mean variance across targets
 
         # Track R-squared of fit if necessary
         if track_r2 or r2_stop:
@@ -178,6 +186,10 @@ class ProbabilisticTFA:
                 sigma2_y0 = sigma2_y1
         
         # Update values of the class with results from EM algorithm
+        self.X_mean = X_mean
+        self.X_std = X_std
+        self.Y_mean = Y_mean
+        self.Y_std = Y_std
         self.P = P1
         self.Q = Q1
         self.sigma2_x = sigma2_x1
@@ -197,7 +209,7 @@ class ProbabilisticTFA:
             Y_hat_variance = self.Q @ linalg.solve(Omega_inverse, self.Q.T)
             return Y_hat, Y_hat_variance
 
-    def predict(self, X, standardize = True, compute_variance = False):
+    def predict(self, X, compute_variance = False):
         # Obtain indices of missing observations and impute using EM fit
         if not np.ma.isMaskedArray(X):
             X_missing_index = np.isnan(X)
@@ -211,9 +223,8 @@ class ProbabilisticTFA:
                 X = X.filled(X_hat)            
         
         # Center and scale predictors if required
-        h = X.shape[0]
-        if standardize and h > 1:
-            X = (X - np.mean(X, axis = 0, where = np.logical_not(X_missing_index))) / np.std(X, axis = 0, where = np.logical_not(X_missing_index))
+        if self.standardize:
+            X = (X - self.X_mean) / self.X_std
 
         # Obtains predicted factors using X only: F_predicted = M (Posterior mean of factors)
         P_scaled = self.P / self.sigma2_x
@@ -279,11 +290,10 @@ class ProbabilisticTFA_StochasticVolatility:
             Returns:
                 np.ndarray:                Predicted target values.
                 np.ndarray (optional):     Time-varying prediction variance tensor if compute_variance is True.
-        predict(self, X, standardize=True, compute_variance=False):
+        predict(self, X, compute_variance=False):
             Predicts target values using the fitted PTFA model with stochastic volatility.
             Parameters:
                 X (np.ndarray):            Predictor data matrix of shape (T, p).
-                standardize (bool):        Whether to standardize the data before predicting.
                 compute_variance (bool):   Whether to compute the prediction variance.
             Returns:
                 np.ndarray:                Predicted target values.
@@ -294,6 +304,10 @@ class ProbabilisticTFA_StochasticVolatility:
         self.n_components = n_components
         
         # Pre-allocate memory for estimates
+        self.X_mean = None
+        self.X_std = None
+        self.Y_mean = None
+        self.Y_std = None
         self.P = None
         self.Q = None
         self.sigma2_x = None
@@ -317,6 +331,7 @@ class ProbabilisticTFA_StochasticVolatility:
         # Fill in components of the class
         self.max_iter = max_iter
         self.tolerance = tolerance          # EM stopping tolerance
+        self.standardize = standardize
         if V_prior is None:
             self.V_prior = np.eye(k)
         self.V_prior_inv = np.eye(k) if V_prior is None else linalg.inv(V_prior)
@@ -346,17 +361,21 @@ class ProbabilisticTFA_StochasticVolatility:
             Y = Y.filled(fill_value=0.0)
 
         # Center and scale predictors and targets separately before stacking
-        if standardize:
-            X = (X - np.mean(X, axis = 0, where = np.logical_not(X_missing_index))) / np.std(X, axis = 0, where = np.logical_not(X_missing_index))
-            Y = (Y - np.mean(Y, axis = 0, where = np.logical_not(Y_missing_index))) / np.std(Y, axis = 0, where = np.logical_not(Y_missing_index))
+        X_mean = np.mean(X, axis=0, where=np.logical_not(X_missing_index))
+        X_std = np.std(X, axis=0, where=np.logical_not(X_missing_index))
+        Y_mean = np.mean(Y, axis=0, where=np.logical_not(Y_missing_index))
+        Y_std = np.std(Y, axis=0, where=np.logical_not(Y_missing_index))
+        if self.standardize:
+            X = (X - X_mean) / X_std
+            Y = (Y - Y_mean) / Y_std
         Z = np.hstack([X, Y])
 
         # Initial values for the parameters (time-varying volatilities start constant)
         if rng is None:
             rng = np.random.default_rng()
         L0 = rng.normal(size = [d, k])
-        sigma2_x_initial = np.var(X, axis = 0).mean()    # Mean variance across features
-        sigma2_y_initial = np.var(Y, axis = 0).mean()    # Mean variance across targets
+        sigma2_x_initial = np.mean(X_std**2)    # Mean variance across features
+        sigma2_y_initial = np.mean(Y_std**2)    # Mean variance across targets
         sigma2_x = np.full(T, sigma2_x_initial)
         sigma2_y = np.full(T, sigma2_y_initial)
 
@@ -435,6 +454,10 @@ class ProbabilisticTFA_StochasticVolatility:
                 L0 = L1
                 
         # Update final values of the class with results from EM algorithm
+        self.X_mean = X_mean
+        self.X_std = X_std
+        self.Y_mean = Y_mean
+        self.Y_std = Y_std
         self.P = P1
         self.Q = Q1
         self.sigma2_x = sigma2_x
@@ -458,7 +481,7 @@ class ProbabilisticTFA_StochasticVolatility:
                 Y_hat_variance[t] = self.Q @ self.Omega[t] @ self.Q.T
             return Y_hat, Y_hat_variance
 
-    def predict(self, X, standardize = True, compute_variance = False):
+    def predict(self, X, compute_variance = False):
         # Obtain indices of missing observations and impute using EM fit
         if not np.ma.isMaskedArray(X):
             X_missing_index = np.isnan(X)
@@ -473,8 +496,8 @@ class ProbabilisticTFA_StochasticVolatility:
         
         # Center and scale predictors if required
         h = X.shape[0]
-        if standardize and h > 1:
-            X = (X - np.mean(X, axis = 0, where = np.logical_not(X_missing_index))) / np.std(X, axis = 0, where = np.logical_not(X_missing_index))
+        if self.standardize:
+            X = (X - self.X_mean) / self.X_std
         
         # Obtains predicted factors and volatilities using X only: F_predicted = M (Posterior mean of factors)
         k = self.n_components
@@ -546,11 +569,10 @@ class ProbabilisticTFA_MixedFrequency:
             Returns:
                 np.ndarray:                Predicted low-frequency target values.
                 np.ndarray (optional):     Prediction variance tensor if compute_variance is True.
-        predict(self, X, standardize=True, compute_variance=False):
+        predict(self, X, compute_variance=False):
             Predicts low-frequency target values using high-frequency predictors.
             Parameters:
                 X (np.ndarray):            High-frequency predictor data matrix of shape (high_frequency_T, p).
-                standardize (bool):        Whether to standardize the data before predicting.
                 compute_variance (bool):   Whether to compute the prediction variance.
             Returns:
                 np.ndarray:                Predicted low-frequency target values.
@@ -561,6 +583,10 @@ class ProbabilisticTFA_MixedFrequency:
         self.n_components = n_components
         
         # Pre-allocate memory for estimates
+        self.X_mean = None
+        self.X_std = None
+        self.Y_mean = None
+        self.Y_std = None
         self.P = None
         self.Q = None
         self.sigma2_x = None
@@ -576,7 +602,6 @@ class ProbabilisticTFA_MixedFrequency:
         high_frequency_T, p = X.shape
         low_frequency_T, q = Y.shape
         k = self.n_components
-        d = p + q
         single_period = isinstance(periods, int)
 
         # Main error check on dimensions: small-dimensional problem requires T > d + k and d > k
@@ -590,6 +615,7 @@ class ProbabilisticTFA_MixedFrequency:
         # Fill in components of the class
         self.max_iter = max_iter
         self.tolerance = tolerance
+        self.standardize = standardize
         self.periods = periods if single_period else np.array(periods)
         if V_prior is None:
             self.V_prior = np.eye(k)
@@ -616,10 +642,14 @@ class ProbabilisticTFA_MixedFrequency:
             Y = Y.filled(fill_value=0.0)
 
         # Center and scale predictors and targets separately
-        if standardize:
-            X = (X - np.mean(X, axis = 0, where = np.logical_not(X_missing_index))) / np.std(X, axis = 0, where = np.logical_not(X_missing_index))
-            Y = (Y - np.mean(Y, axis = 0, where = np.logical_not(Y_missing_index))) / np.std(Y, axis = 0, where = np.logical_not(Y_missing_index))
-        
+        X_mean = np.mean(X, axis=0, where=np.logical_not(X_missing_index))
+        X_std = np.std(X, axis=0, where=np.logical_not(X_missing_index))
+        Y_mean = np.mean(Y, axis=0, where=np.logical_not(Y_missing_index))
+        Y_std = np.std(Y, axis=0, where=np.logical_not(Y_missing_index))
+        if self.standardize:
+            X = (X - X_mean) / X_std
+            Y = (Y - Y_mean) / Y_std
+
         # Initial values for the parameters
         if rng is None:
             rng = np.random.default_rng()
@@ -702,6 +732,10 @@ class ProbabilisticTFA_MixedFrequency:
                 sigma2_y0 = sigma2_y1
         
         # Update values of the class with results from EM algorithm
+        self.X_mean = X_mean
+        self.X_std = X_std
+        self.Y_mean = Y_mean
+        self.Y_std = Y_std
         self.P = P1
         self.Q = Q1
         self.sigma2_x = sigma2_x1
@@ -732,7 +766,7 @@ class ProbabilisticTFA_MixedFrequency:
                 Y_hat_variance = np.tile(Y_latent_variance, [low_frequency_T, q, q]) / self.periods[:, np.newaxis, np.newaxis]
             return Y_hat, Y_hat_variance
     
-    def predict(self, X, periods, standardize = True, compute_variance = False):
+    def predict(self, X, periods, compute_variance = False):
         # Obtain necessary sizes and period indices
         single_period = isinstance(periods, int)
         if not single_period:
@@ -753,9 +787,8 @@ class ProbabilisticTFA_MixedFrequency:
                 X = X.filled(X_hat)  
         
         # Center and scale predictors if required
-        h = X.shape[0]
-        if standardize and h > 1:
-            X = (X - np.mean(X, axis = 0, where = np.logical_not(X_missing_index))) / np.std(X, axis = 0, where = np.logical_not(X_missing_index))
+        if self.standardize:
+            X = (X - self.X_mean) / self.X_std
 
         # Obtains predicted factors using X only: F_predicted = M (Posterior mean of factors)
         P_scaled = self.P / self.sigma2_x
@@ -836,11 +869,10 @@ class ProbabilisticTFA_DynamicFactors:
             Returns:
                 np.ndarray:                Predicted target values.
                 np.ndarray (optional):     Prediction variance matrix if compute_variance is True.
-        predict(self, X, standardize=True, compute_variance=False):
+        predict(self, X, compute_variance=False):
             Predicts target values using the fitted PTFA model with dynamic factors.
             Parameters:
                 X (np.ndarray):            Predictor data matrix of shape (T, p).
-                standardize (bool):        Whether to standardize the data before predicting.
                 compute_variance (bool):   Whether to compute the prediction variance.
             Returns:
                 np.ndarray:                Predicted target values.
@@ -918,6 +950,7 @@ class ProbabilisticTFA_DynamicFactors:
         # Fill in components of the class
         self.max_iter = max_iter
         self.tolerance = tolerance
+        self.standardize = standardize
         if V_prior is None:
             self.V_prior = np.eye(k)
         self.V_prior_inv = np.eye(k) if V_prior is None else linalg.inv(V_prior)
@@ -943,9 +976,13 @@ class ProbabilisticTFA_DynamicFactors:
             Y = Y.filled(fill_value=0.0)
 
         # Center and scale predictors and targets separately before stacking
-        if standardize:
-            X = (X - np.mean(X, axis = 0, where = np.logical_not(X_missing_index))) / np.std(X, axis = 0, where = np.logical_not(X_missing_index))
-            Y = (Y - np.mean(Y, axis = 0, where = np.logical_not(Y_missing_index))) / np.std(Y, axis = 0, where = np.logical_not(Y_missing_index))
+        X_mean = np.mean(X, axis = 0, where = np.logical_not(X_missing_index))
+        X_std = np.std(X, axis = 0, where = np.logical_not(X_missing_index))
+        Y_mean = np.mean(Y, axis = 0, where = np.logical_not(Y_missing_index))
+        Y_std = np.std(Y, axis = 0, where = np.logical_not(Y_missing_index))
+        if self.standardize:
+            X = (X - X_mean) / X_std
+            Y = (Y - Y_mean) / Y_std
         Z = np.hstack([X, Y])
 
         # Initial values for the parameters
@@ -1028,7 +1065,7 @@ class ProbabilisticTFA_DynamicFactors:
             
             # Fill in missing upper diagonal elements for diagonal blocks
             for blocks in range(2):
-                sum_array[blocks][np.triu_indices(k, 1)] = sum_array[blocks][np.tril_indices(k, -1)]
+                sum_array[blocks] = (sum_array[blocks] + sum_array[blocks].T) / 2
 
             # Update loadings and error variances
             V_0 = sum_array[0] + M.T @ M
@@ -1079,6 +1116,10 @@ class ProbabilisticTFA_DynamicFactors:
                 f0_0 = f0_1
         
         # Update values of the class with results from EM algorithm
+        self.X_mean = X_mean
+        self.X_std = X_std
+        self.Y_mean = Y_mean
+        self.Y_std = Y_std
         self.P = P1
         self.Q = Q1
         self.sigma2_x = sigma2_x1
@@ -1112,7 +1153,7 @@ class ProbabilisticTFA_DynamicFactors:
                 Y_hat_variance[t] = self.Q @ Omega_tt @ self.Q.T
             return Y_hat, Y_hat_variance
 
-    def predict(self, X, standardize = True, compute_variance = False):
+    def predict(self, X, compute_variance=False):
         # Obtain indices of missing observations and impute using EM fit
         if not np.ma.isMaskedArray(X):
             X_missing_index = np.isnan(X)
@@ -1127,9 +1168,9 @@ class ProbabilisticTFA_DynamicFactors:
         
         # Center and scale predictors if required
         h = X.shape[0]
-        if standardize and h > 1:
-            X = (X - np.mean(X, axis = 0, where = np.logical_not(X_missing_index))) / np.std(X, axis = 0, where = np.logical_not(X_missing_index))
-        
+        if self.standardize:
+            X = (X - self.X_mean) / self.X_std
+
         # Compute some necessary quantities using dynamic information estimates
         k = self.n_components
         Tk = self.factors.shape[0] * k
@@ -1142,6 +1183,7 @@ class ProbabilisticTFA_DynamicFactors:
         Omega_TT = self.Omega[:k, range(Tk-k, Tk)]
         offsets = range(0, -k, -1)
         Omega_TT = sparse.diags(Omega_TT, offsets, shape=(k, k)).toarray()
+        Omega_TT = (Omega_TT + Omega_TT.T) / 2    # Ensure symmetry
         Omega_correction = linalg.inv(self.A @ Omega_TT @ self.A.T + self.V_prior)
         M_T = self.factors[-1]
 
@@ -1157,9 +1199,11 @@ class ProbabilisticTFA_DynamicFactors:
 
         # Save posterior precision to a symmetric banded matrix and compute its Cholesky decomposition
         # (Tk x Tk) -> (2k x Tk), only storing the 2k lower diagonal bands
-        Omega_inv_cholesky = np.zeros([2 * k, h * k])
-        for diagonal in range(2 * k):
-            Omega_inv_cholesky[diagonal, :(h * k - diagonal)] = Omega_inv_sparse.diagonal(-diagonal)
+        hk = h * k
+        Omega_inv_cholesky = np.zeros([2 * k, hk])
+        min_dimension = min(h, 2)
+        for diagonal in range(min_dimension * k):
+            Omega_inv_cholesky[diagonal, :(hk - diagonal)] = Omega_inv_sparse.diagonal(-diagonal)
         Omega_inv_cholesky = linalg.cholesky_banded(Omega_inv_cholesky, overwrite_ab=True, lower=True)
                 
         # Compute predicted factors using banded matrix solver
@@ -1229,11 +1273,10 @@ class ProbabilisticPCA:
             Returns:
                 np.ndarray:                Reconstructed data values.
                 np.ndarray (optional):     Reconstruction variance matrix if compute_variance is True.
-        predict(self, X, standardize=True, compute_variance=False):
+        predict(self, X, compute_variance=False):
             Reconstructs data using the fitted PPCA model (for out-of-sample data).
             Parameters:
                 X (np.ndarray):            Data matrix of shape (T, d) to reconstruct.
-                standardize (bool):        Whether to standardize the data before reconstructing.
                 compute_variance (bool):   Whether to compute the reconstruction variance.
             Returns:
                 np.ndarray:                Reconstructed data values.
@@ -1262,6 +1305,7 @@ class ProbabilisticPCA:
         # Fill in components of the class controlling algorithm
         self.max_iter = max_iter
         self.tolerance = tolerance
+        self.standardize = standardize
         if V_prior is None:
             self.V_prior = np.eye(k)
         self.V_prior_inv = np.eye(k) if V_prior is None else linalg.inv(V_prior)
@@ -1278,9 +1322,11 @@ class ProbabilisticPCA:
             X = X.filled(fill_value=0.0)
 
         # Center and scale predictors and targets separately before stacking
-        if standardize:
-            X = (X - np.mean(X, axis = 0, where = np.logical_not(X_missing_index))) / np.std(X, axis = 0, where = np.logical_not(X_missing_index))
-            
+        X_mean = np.mean(X, axis = 0, where = np.logical_not(X_missing_index))
+        X_std = np.std(X, axis = 0, where = np.logical_not(X_missing_index))
+        if self.standardize:
+            X = (X - X_mean) / X_std
+
         # Initial values for the parameters
         if rng is None:
             rng = np.random.default_rng()
@@ -1337,6 +1383,8 @@ class ProbabilisticPCA:
                 sigma2_0 = sigma2_1
                 
         # Update values of the class with results from EM algorithm
+        self.X_mean = X_mean
+        self.X_std = X_std
         self.L = L1
         self.sigma2 = sigma2_1
         self.r2_array = np.asarray(r2_list) if track_r2 else None
@@ -1354,7 +1402,7 @@ class ProbabilisticPCA:
             X_hat_variance = self.L @ linalg.solve(Omega_inverse, self.L.T)
             return X_hat, X_hat_variance
 
-    def predict(self, X, standardize = True, compute_variance = False):
+    def predict(self, X, compute_variance=False):
         # Obtain indices of missing observations and impute using EM fit
         if not np.ma.isMaskedArray(X):
             X_missing_index = np.isnan(X)
@@ -1368,9 +1416,8 @@ class ProbabilisticPCA:
                 X = X.filled(X_hat)            
         
         # Center and scale predictors if required
-        h = X.shape[0]
-        if standardize and h > 1:
-            X = (X - np.mean(X, axis = 0, where = np.logical_not(X_missing_index))) / np.std(X, axis = 0, where = np.logical_not(X_missing_index))
+        if self.standardize:
+            X = (X - self.X_mean) / self.X_std
 
         # Obtains predicted factors using X only: F_predicted = M (Posterior mean of factors)
         L_scaled = self.L / self.sigma2
